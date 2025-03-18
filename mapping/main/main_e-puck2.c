@@ -19,11 +19,15 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_netif.h"
+#include "esp_event.h"
 #include "main_e-puck2.h"
 #include "uart_e-puck2.h"
 #include "rgb_led_e-puck2.h"
 #include "button_e-puck2.h"
 #include "mapping.h"
+#include "mqtt_app.h"
+#include "esp_wifi.h"
  
  #define IR_PROX_OFFSET  40    // Starting byte index for IR sensor data in the sensor packet
  #define NUM_IR_SENSORS  8     // e-puck2 has 8 IR sensors
@@ -31,89 +35,152 @@
 
  #define EFFECTIVE_SPEED 1000   // 0.064 m/s ≈ 6.4 cm/s
  #define PRINT_TAG  "GC-DEMO"
+ #define WIFI_SSID "MyHotspot"
+ #define WIFI_PASS "YourPassword"
+
+ static const char *TAG = "wifi_station";
+
+ // Event group to signal when connected
+static EventGroupHandle_t wifi_event_group;
+const int CONNECTED_BIT = BIT0;
+
+// Wi-Fi event handler
+static void event_handler(void *arg, esp_event_base_t event_base,
+                          int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT) {
+        if (event_id == WIFI_EVENT_STA_START) {
+            ESP_LOGI(TAG, "Wi-Fi started, attempting to connect...");
+            esp_wifi_connect();
+        } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+            ESP_LOGI(TAG, "Disconnected from AP, retrying...");
+            esp_wifi_connect();
+        }
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        // IP_EVENT_STA_GOT_IP event data contains the IP address info
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+    }
+}
+
+static void wifi_init_sta(void)
+{
+    // Initialize NVS (required for Wi-Fi)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
+        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Create the default Wi-Fi station network interface
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    // Initialize Wi-Fi with default configurations
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    // Create event group for Wi-Fi events
+    wifi_event_group = xEventGroupCreate();
+
+    // Register event handlers for Wi-Fi and IP events
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        NULL));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        NULL));
+
+    // Configure Wi-Fi connection settings
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = WIFI_SSID,
+            .password = WIFI_PASS,
+            // Note: Setting the threshold for the auth mode is optional.
+        },
+    };
+
+    // Set Wi-Fi mode to STA (station)
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    
+    // Start Wi-Fi
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_sta finished. Waiting for connection...");
+
+    // Wait until we are connected (CONNECTED_BIT is set)
+    EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
+                                           CONNECTED_BIT,
+                                           pdFALSE,
+                                           pdFALSE,
+                                           portMAX_DELAY);
+    if(bits & CONNECTED_BIT) {
+        ESP_LOGI(TAG, "Connected to AP: %s", WIFI_SSID);
+    }
+}
 
 
-// Your existing function that moves forward for a given time in milliseconds.
-// This function sets the motor speed, delays for time_ms, then stops.
-// void moveforward(uint32_t time_ms) {
-// 	printf("Moving forward for %ld ms\n", time_ms);
-//     set_speed(1000);  // set speed to 500 (adjust if needed)
-//     vTaskDelay(time_ms / portTICK_PERIOD_MS);
-//     // set_speed(0);    // stop the robot
-// }
+ // Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
+ static uint16_t sensor_samples[NUM_IR_SENSORS][NUM_SAMPLES] = {0};
+ static uint8_t sample_index[NUM_IR_SENSORS] = {0};
 
-// New function: moves forward a specified distance (in meters)
-// void move_forward_distance(float distance) {
-//     // Calculate time in ms: time (s) = distance / speed, then convert to ms.
-//     uint32_t time_ms = (uint32_t)((distance / EFFECTIVE_SPEED) * 1000.0);
-//     printf("Moving forward %.2f m for %ld ms\n", distance, time_ms);
-//     moveforward(time_ms);
-// }
+ static uint16_t moving_average(uint16_t new_value, int sensor_index) {
+	sensor_samples[sensor_index][sample_index[sensor_index]] = new_value;
+	sample_index[sensor_index] = (sample_index[sensor_index] + 1) % NUM_SAMPLES;
+	
+	uint32_t sum = 0;
+	for (int j = 0; j < NUM_SAMPLES; j++) {
+		sum += sensor_samples[sensor_index][j];
+	}
+	return (uint16_t)(sum / NUM_SAMPLES);
+}
+
+static void sensor_task(void *pvParameter)
+ {
+	 while(1) {
+		 // Fetch the next sensor packet (104 bytes expected).
+		 sensors_buffer_t *sensor_buff = uart_get_data_ptr();
+		 
+		 printf("\r\nIR Sensor Values (Moving Average over %d samples):\r\n", NUM_SAMPLES);
+		 for (int i = 0; i < NUM_IR_SENSORS; i++) {
+			 // Combine two bytes to form an unsigned 16-bit integer.
+			 uint16_t raw_value = sensor_buff->data[IR_PROX_OFFSET + 2*i] |
+								  (sensor_buff->data[IR_PROX_OFFSET + 2*i + 1] << 8);
+			 // Mask out the lower 12 bits to extract the actual IR sensor reading.
+			 uint16_t ir_value = raw_value & 0x0FFF;
+			 
+			 // Compute the filtered value using the moving average filter.
+			 uint16_t filtered_value = moving_average(ir_value, i);
+			 
+			 // Print both the raw and filtered sensor values.
+			 printf("  Sensor %d: raw=0x%04X, IR value=%d, filtered=%d\r\n",
+					i, raw_value, ir_value, filtered_value);
+		 }
+		 printf("Note: Higher filtered values indicate a closer or more reflective object.\r\n");
  
-//  // Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
-//  static uint16_t sensor_samples[NUM_IR_SENSORS][NUM_SAMPLES] = {0};
-//  static uint8_t sample_index[NUM_IR_SENSORS] = {0};
- 
-//  /// Computes the moving average for a given sensor.
-//  /// The new reading is stored in a circular buffer and the average is computed.
-//  static uint16_t moving_average(uint16_t new_value, int sensor_index) {
-// 	 sensor_samples[sensor_index][sample_index[sensor_index]] = new_value;
-// 	 sample_index[sensor_index] = (sample_index[sensor_index] + 1) % NUM_SAMPLES;
-	 
-// 	 uint32_t sum = 0;
-// 	 for (int j = 0; j < NUM_SAMPLES; j++) {
-// 		 sum += sensor_samples[sensor_index][j];
-// 	 }
-// 	 return (uint16_t)(sum / NUM_SAMPLES);
-//  }
- 
-//  static void sensor_task(void *pvParameter)
-// {
-//     while(1) {
-//         sensors_buffer_t *sensor_buff = uart_get_data_ptr();
-//         printf("\r\nIR Sensor Values (Moving Average over %d samples):\r\n", NUM_SAMPLES);
+		 // Delay 1 second before the next reading.
+		 vTaskDelay(pdMS_TO_TICKS(1000));
+	 }
+ }
 
-//         // Let's assume sensor 0 is the front sensor.
-//         uint16_t raw_value = sensor_buff->data[IR_PROX_OFFSET + 0] | 
-//                              (sensor_buff->data[IR_PROX_OFFSET + 1] << 8);
-//         uint16_t ir_value = raw_value & 0x0FFF;
-//         uint16_t filtered_value = moving_average(ir_value, 0);
 
-//         // Print sensor value.
-//         printf("Sensor 0: raw=0x%04X, IR value=%d, filtered=%d\r\n",
-//                raw_value, ir_value, filtered_value);
-
-//         // Convert filtered IR value to a distance (meters).
-//         // float distance = convert_ir_value_to_distance(filtered_value);
-//         // printf("Converted distance: %.2f m\r\n", distance);
-
-//         // Update the occupancy grid using the sensor reading.
-//         // For example, update row 2 of the grid with this sensor reading.
-//         // update_occupancy_grid(distance, 2);
-
-//         // Optionally print the updated occupancy grid.
-//         // print_occupancy_grid();
-
-//         // Delay 1 second before the next reading.
-//         vTaskDelay(pdMS_TO_TICKS(1000));
-//     }
-// }
 
 void straight_movement_task(int ms) {
 
-    sensors_buffer_t *sensor_buff;
-
-
 	uart_get_data_ptr();
-
     // Move forward at a set speed.
     set_speed(1000);  // Adjust this value based on calibration.
     // printf("Moving straight for 2 seconds...\n");
     vTaskDelay(pdMS_TO_TICKS(ms));  // Move for 2 seconds.
-    
-    // Stop the robot.
-    // set_speed(0);
-    printf("Stopped.\n");
     
 }
 
@@ -232,7 +299,6 @@ void snake_movement_task(void *pvParameter) {
     set_speed(0);
     printf("Snaking pattern complete.\n");
     
-    // Optionally, keep the task alive.
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -247,18 +313,8 @@ void snake_movement_task(void *pvParameter) {
 	 rgb_init();      // Optional: for LED feedback.
 	 button_init();   // Optional: for reading the button state.
 	 init_occupancy_grid(); // Initialize the occupancy grid.
-
-	 // Start moving forward (set_speed's parameter can be adjusted for speed).
-	//  vTaskDelay(100/portTICK_PERIOD_MS);	
-	//  imu_turn_90(1);
-	//  vTaskDelay(100/portTICK_PERIOD_MS);
-	//  imu_turn_90(-1);
-	//  xTaskCreatePinnedToCore(straight_movement_task, "straight_movement_task", 2048, NULL, 4, NULL,1);
- 
-	 // Stop the bot.
-	//  printf("Setting the speed to 0");
-	//  set_speed(0);
-	//  move_forward_distance(0.5);
+	 wifi_init_sta();
+     mqtt_app_start();
 
 	 float data = 0.3;
 
