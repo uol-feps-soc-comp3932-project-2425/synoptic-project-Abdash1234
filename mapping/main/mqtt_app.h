@@ -5,5 +5,8 @@
 
 // Starts the MQTT client and connects to the broker.
 void mqtt_app_start(void);
+void mqtt_publish(const char *topic, const char *data);
+void publish_with_timestamp(const char* topic, const char* msg);
+
 
 #endif // MQTT_H

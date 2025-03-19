@@ -18,4 +18,7 @@ void update_occupancy_grid(float distance, int row);
 // Prints the occupancy grid to the serial console for debugging.
 void print_occupancy_grid(void);
 
+
+int (*getGrid(void))[GRID_COLS];
+
 #endif // MAPPING_H

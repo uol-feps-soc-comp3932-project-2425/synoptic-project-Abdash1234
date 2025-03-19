@@ -30,3 +30,7 @@ void print_occupancy_grid(void) {
         printf("\n");
     }
 }
+
+int (*getGrid(void))[GRID_COLS] {
+    return occupancy_grid;
+}

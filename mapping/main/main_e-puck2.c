@@ -1,11 +1,4 @@
-/*
- * Minimal example that reads IR proximity sensors from the STM32,
- * applies a simple moving average filter (over 3 samples), and logs
- * the values to the console via UART on the ESP32.
- *
- * The IR sensor readings are stored as 12-bit values within a 16-bit field.
- * This example uses a 3-sample moving average filter for each sensor.
- */
+
 
 #include <stdio.h>
 #include <string.h>
@@ -34,9 +27,16 @@
  #define NUM_SAMPLES     3     // Number of samples to average for filtering
 
  #define EFFECTIVE_SPEED 1000   // 0.064 m/s ≈ 6.4 cm/s
+ #define GRID_BUFFER_SIZE 1024
  #define PRINT_TAG  "GC-DEMO"
  #define WIFI_SSID "MyHotspot"
  #define WIFI_PASS "YourPassword"
+
+ #define STATUS_TOPIC "epuck/status"
+ #define SENSOR_TOPIC "epuck/sensor"
+ #define MAP_TOPIC "epuck/map"
+ #define CMD_TOPIC "epuck/cmd"
+ #define THROUGHPUT_TOPIC "epuck/throughput"
 
  static const char *TAG = "wifi_station";
 
@@ -128,7 +128,6 @@ static void wifi_init_sta(void)
     }
 }
 
-
  // Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
  static uint16_t sensor_samples[NUM_IR_SENSORS][NUM_SAMPLES] = {0};
  static uint8_t sample_index[NUM_IR_SENSORS] = {0};
@@ -172,8 +171,6 @@ static void sensor_task(void *pvParameter)
 	 }
  }
 
-
-
 void straight_movement_task(int ms) {
 
 	uart_get_data_ptr();
@@ -183,7 +180,6 @@ void straight_movement_task(int ms) {
     vTaskDelay(pdMS_TO_TICKS(ms));  // Move for 2 seconds.
     
 }
-
 // Parameter: direction: +1 for right turn, -1 for left turn.
 void imu_turn_90(int direction) {
     // Validate parameter.
@@ -255,12 +251,29 @@ void imu_turn_90(int direction) {
     set_speed(0);
     ESP_LOGI(PRINT_TAG, "Turn complete: angle reached %.2f degrees", angle_deg);
 }
+// Convert the occupancy grid into a string.
+void occupancy_grid_to_string(char *buffer, size_t buffer_size) {
+    int offset = 0;
+    for (int i = 0; i < GRID_ROWS; i++) {
+        for (int j = 0; j < GRID_COLS; j++) {
+            offset += snprintf(buffer + offset, buffer_size - offset, "%d ", occupancy_grid[i][j]);
+            if (offset >= buffer_size) break;
+        }
+        offset += snprintf(buffer + offset, buffer_size - offset, "\n");
+        if (offset >= buffer_size) break;
+    }
+}
 
 // Snaking movement task: covers the designated area in a snake-like pattern.
 void snake_movement_task(void *pvParameter) {
+	char grid_str[GRID_BUFFER_SIZE];
     const int numRows = 5;      // Number of rows to cover; adjust as needed.
     int currentRow = 0;
     bool movingEast = true;     // Starting direction: assume robot initially faces east (right).
+
+	// publish_with_timestamp("epuck/map", "Initial Grid");
+	// occupancy_grid_to_string(grid_str, sizeof(grid_str));
+	// publish_with_timestamp("epuck/map", grid_str);
     
     while (currentRow < numRows) {
         // 1. Move straight along the current row.
@@ -298,13 +311,25 @@ void snake_movement_task(void *pvParameter) {
     // When the snaking pattern is complete, stop the robot.
     set_speed(0);
     printf("Snaking pattern complete.\n");
+	
+	occupancy_grid_to_string(grid_str, sizeof(grid_str));
+	publish_with_timestamp("epuck/map", grid_str);
     
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
-
+// Add this function to your C code.
+void throughput_task(void *pvParameter) {
+    while (1) {
+        // Publish a message on a dedicated topic.
+        // You could use a fixed payload, or build one dynamically.
+        publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
+        // Publish every 100 ms (adjust as needed).
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
  
  void app_main(void)
  {
@@ -319,24 +344,17 @@ void snake_movement_task(void *pvParameter) {
 	 float data = 0.3;
 
 	 // Update the occupancy grid with the simulated data.
+	 xTaskCreatePinnedToCore(sensor_task, "sesnor_task", 2048, NULL, 4, NULL, 0);
 	 xTaskCreatePinnedToCore(snake_movement_task, "snake_movement_task", 4096, NULL, 4, NULL, 1);
+	 xTaskCreatePinnedToCore(throughput_task, "throughput_task", 2048, NULL, 4, NULL, 0);
 	 update_occupancy_grid(data, 2);
 	 print_occupancy_grid();
+	 
+	 publish_with_timestamp("epuck/status", "Hello from e-puck!");
 
-  
-	//  // Create the sensor reading/logging task.
-	//  xTaskCreate(
-	// 	  sensor_task,        // Task function.
-	// 	  "sensor_task",      // Task name.
-	// 	  2048,               // Stack size.
-	// 	  NULL,               // Task parameter.
-	// 	  4,                  // Task priority.
-	// 	  NULL                // Task handle.
-	//  );
   
 	 // Main task can perform other operations or remain idle.
 	 while(1) {
 		  vTaskDelay(pdMS_TO_TICKS(1000));
 	 }
  }
- 

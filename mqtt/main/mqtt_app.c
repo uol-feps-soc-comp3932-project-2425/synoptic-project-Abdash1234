@@ -54,3 +54,12 @@ void mqtt_app_start(void)
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
 }
+
+void mqtt_publish(const char *topic, const char *data)
+{
+    if (mqtt_client) {
+        esp_mqtt_client_publish(mqtt_client, topic, data, 0, 1, 0);
+    } else {
+        ESP_LOGE(TAG, "MQTT client not initialized");
+    }
+}
