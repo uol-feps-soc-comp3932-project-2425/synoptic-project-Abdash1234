@@ -11,6 +11,7 @@ SemaphoreHandle_t mqtt_connected_sem = NULL;
 uint32_t messages_published = 0;
 uint32_t bytes_published = 0;
 uint32_t publish_errors = 0;
+uint32_t msg_seq = 0;
 
 void mqtt_publish(const char *topic, const char *data)
 {
@@ -89,10 +90,18 @@ void publish_with_timestamp(const char* topic, const char* msg) {
     // Get current time in microseconds.
     int64_t timestamp = esp_timer_get_time();
     
-    // Prepare a payload with the message and timestamp.
+    // Prepare a payload with the sequence number, message, and timestamp.
+    // Use %u for the sequence number (uint32_t) and %lld for the timestamp.
     char payload[256];
-    snprintf(payload, sizeof(payload), "{\"msg\":\"%s\", \"timestamp\": %lld}", msg, timestamp);
+    // snprintf(payload, sizeof(payload), "{\"seq\": %lu, \"msg\": \"%s\", \"timestamp\": %lld}", msg_seq++, msg, timestamp);
+    // snprintf(payload, sizeof(payload), "{\"msg\":\"%s\", \"timestamp\": %lld}", msg, timestamp);
+    snprintf(payload, sizeof(payload),
+         "{\"seq\": %lu, \"msg\": \"%s\", \"timestamp\": %lld}",
+         (unsigned long)msg_seq++, msg, timestamp);
+
+
     
     // Publish using your existing MQTT publish function.
     mqtt_publish(topic, payload);
 }
+

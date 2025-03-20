@@ -1,0 +1,446 @@
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 1680808}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 1680808} : 1742487342686835 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1687704}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1687704} : 1742487342680080 us
+Topic: epuck/throughput, Data: {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1689884}
+Message latency (epuck/throughput): {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1689884} : 1742487342678038 us
+Topic: epuck/throughput, Data: {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 2187535}
+Message latency (epuck/throughput): {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 2187535} : 1742487342659265 us
+Topic: epuck/throughput, Data: {"seq": 4, "msg": "Throughput test message from e-puck!", "timestamp": 2687536}
+Message latency (epuck/throughput): {"seq": 4, "msg": "Throughput test message from e-puck!", "timestamp": 2687536} : 1742487342663120 us
+Topic: epuck/throughput, Data: {"seq": 5, "msg": "Throughput test message from e-puck!", "timestamp": 3187535}
+Message latency (epuck/throughput): {"seq": 5, "msg": "Throughput test message from e-puck!", "timestamp": 3187535} : 1742487342665260 us
+Topic: epuck/throughput, Data: {"seq": 6, "msg": "Throughput test message from e-puck!", "timestamp": 3687538}
+Message latency (epuck/throughput): {"seq": 6, "msg": "Throughput test message from e-puck!", "timestamp": 3687538} : 1742487342664821 us
+Topic: epuck/throughput, Data: {"seq": 7, "msg": "Throughput test message from e-puck!", "timestamp": 4187537}
+Message latency (epuck/throughput): {"seq": 7, "msg": "Throughput test message from e-puck!", "timestamp": 4187537} : 1742487342656439 us
+Topic: epuck/throughput, Data: {"seq": 8, "msg": "Throughput test message from e-puck!", "timestamp": 4687536}
+Message latency (epuck/throughput): {"seq": 8, "msg": "Throughput test message from e-puck!", "timestamp": 4687536} : 1742487342654484 us
+Topic: epuck/throughput, Data: {"seq": 9, "msg": "Throughput test message from e-puck!", "timestamp": 5187535}
+Message latency (epuck/throughput): {"seq": 9, "msg": "Throughput test message from e-puck!", "timestamp": 5187535} : 1742487342654606 us
+Topic: epuck/throughput, Data: {"seq": 10, "msg": "Throughput test message from e-puck!", "timestamp": 5687536}
+Message latency (epuck/throughput): {"seq": 10, "msg": "Throughput test message from e-puck!", "timestamp": 5687536} : 1742487342654472 us
+Topic: epuck/throughput, Data: {"seq": 11, "msg": "Throughput test message from e-puck!", "timestamp": 6197535}
+Message latency (epuck/throughput): {"seq": 11, "msg": "Throughput test message from e-puck!", "timestamp": 6197535} : 1742487343939387 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536} : 1742487347935512 us
+Topic: epuck/throughput, Data: {"seq": 13, "msg": "Throughput test message from e-puck!", "timestamp": 7197535}
+Message latency (epuck/throughput): {"seq": 13, "msg": "Throughput test message from e-puck!", "timestamp": 7197535} : 1742487347435857 us
+Topic: epuck/throughput, Data: {"seq": 14, "msg": "Throughput test message from e-puck!", "timestamp": 7698003}
+Message latency (epuck/throughput): {"seq": 14, "msg": "Throughput test message from e-puck!", "timestamp": 7698003} : 1742487347156976 us
+Topic: epuck/throughput, Data: {"seq": 15, "msg": "Throughput test message from e-puck!", "timestamp": 8197535}
+Message latency (epuck/throughput): {"seq": 15, "msg": "Throughput test message from e-puck!", "timestamp": 8197535} : 1742487346657846 us
+Topic: epuck/throughput, Data: {"seq": 16, "msg": "Throughput test message from e-puck!", "timestamp": 8697536}
+Message latency (epuck/throughput): {"seq": 16, "msg": "Throughput test message from e-puck!", "timestamp": 8697536} : 1742487346158205 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536} : 1742487348158477 us
+Topic: epuck/throughput, Data: {"seq": 17, "msg": "Throughput test message from e-puck!", "timestamp": 9197535}
+Message latency (epuck/throughput): {"seq": 17, "msg": "Throughput test message from e-puck!", "timestamp": 9197535} : 1742487345658645 us
+Topic: epuck/throughput, Data: {"seq": 18, "msg": "Throughput test message from e-puck!", "timestamp": 9697536}
+Message latency (epuck/throughput): {"seq": 18, "msg": "Throughput test message from e-puck!", "timestamp": 9697536} : 1742487345158769 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536} : 1742487348158877 us
+Topic: epuck/throughput, Data: {"seq": 19, "msg": "Throughput test message from e-puck!", "timestamp": 10197535}
+Message latency (epuck/throughput): {"seq": 19, "msg": "Throughput test message from e-puck!", "timestamp": 10197535} : 1742487344658998 us
+Topic: epuck/throughput, Data: {"seq": 20, "msg": "Throughput test message from e-puck!", "timestamp": 10697536}
+Message latency (epuck/throughput): {"seq": 20, "msg": "Throughput test message from e-puck!", "timestamp": 10697536} : 1742487344159108 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536} : 1742487348159217 us
+Topic: epuck/throughput, Data: {"seq": 21, "msg": "Throughput test message from e-puck!", "timestamp": 11197536}
+Message latency (epuck/throughput): {"seq": 21, "msg": "Throughput test message from e-puck!", "timestamp": 11197536} : 1742487343659327 us
+Topic: epuck/throughput, Data: {"seq": 22, "msg": "Throughput test message from e-puck!", "timestamp": 11697537}
+Message latency (epuck/throughput): {"seq": 22, "msg": "Throughput test message from e-puck!", "timestamp": 11697537} : 1742487343159432 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6697536} : 1742487348159537 us
+Topic: epuck/throughput, Data: {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 12197535}
+Message latency (epuck/throughput): {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 12197535} : 1742487342659646 us
+Topic: epuck/throughput, Data: {"seq": 24, "msg": "Throughput test message from e-puck!", "timestamp": 12707535}
+Message latency (epuck/throughput): {"seq": 24, "msg": "Throughput test message from e-puck!", "timestamp": 12707535} : 1742487342654415 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 1383567}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 1383567} : 1742487375373585 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487385642686 us
+Topic: epuck/throughput, Data: {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1415653}
+Message latency (epuck/throughput): {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1415653} : 1742487390129338 us
+Topic: epuck/throughput, Data: {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 1917536}
+Message latency (epuck/throughput): {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 1917536} : 1742487389627979 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390139283 us
+Topic: epuck/throughput, Data: {"seq": 4, "msg": "Throughput test message from e-puck!", "timestamp": 2420770}
+Message latency (epuck/throughput): {"seq": 4, "msg": "Throughput test message from e-puck!", "timestamp": 2420770} : 1742487389125116 us
+Topic: epuck/throughput, Data: {"seq": 5, "msg": "Throughput test message from e-puck!", "timestamp": 2917536}
+Message latency (epuck/throughput): {"seq": 5, "msg": "Throughput test message from e-puck!", "timestamp": 2917536} : 1742487388628492 us
+Topic: epuck/throughput, Data: {"seq": 6, "msg": "Throughput test message from e-puck!", "timestamp": 3417537}
+Message latency (epuck/throughput): {"seq": 6, "msg": "Throughput test message from e-puck!", "timestamp": 3417537} : 1742487388128655 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390139896 us
+Topic: epuck/throughput, Data: {"seq": 7, "msg": "Throughput test message from e-puck!", "timestamp": 3917537}
+Message latency (epuck/throughput): {"seq": 7, "msg": "Throughput test message from e-puck!", "timestamp": 3917537} : 1742487387628978 us
+Topic: epuck/throughput, Data: {"seq": 8, "msg": "Throughput test message from e-puck!", "timestamp": 4417538}
+Message latency (epuck/throughput): {"seq": 8, "msg": "Throughput test message from e-puck!", "timestamp": 4417538} : 1742487387129103 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390140316 us
+Topic: epuck/throughput, Data: {"seq": 9, "msg": "Throughput test message from e-puck!", "timestamp": 4917536}
+Message latency (epuck/throughput): {"seq": 9, "msg": "Throughput test message from e-puck!", "timestamp": 4917536} : 1742487386629357 us
+Topic: epuck/throughput, Data: {"seq": 10, "msg": "Throughput test message from e-puck!", "timestamp": 5417537}
+Message latency (epuck/throughput): {"seq": 10, "msg": "Throughput test message from e-puck!", "timestamp": 5417537} : 1742487386129482 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390140697 us
+Topic: epuck/throughput, Data: {"seq": 11, "msg": "Throughput test message from e-puck!", "timestamp": 5917536}
+Message latency (epuck/throughput): {"seq": 11, "msg": "Throughput test message from e-puck!", "timestamp": 5917536} : 1742487385629740 us
+Topic: epuck/throughput, Data: {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6417537}
+Message latency (epuck/throughput): {"seq": 12, "msg": "Throughput test message from e-puck!", "timestamp": 6417537} : 1742487385300648 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390312121 us
+Topic: epuck/throughput, Data: {"seq": 13, "msg": "Throughput test message from e-puck!", "timestamp": 6917536}
+Message latency (epuck/throughput): {"seq": 13, "msg": "Throughput test message from e-puck!", "timestamp": 6917536} : 1742487384801334 us
+Topic: epuck/throughput, Data: {"seq": 14, "msg": "Throughput test message from e-puck!", "timestamp": 7417537}
+Message latency (epuck/throughput): {"seq": 14, "msg": "Throughput test message from e-puck!", "timestamp": 7417537} : 1742487384301497 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390312709 us
+Topic: epuck/throughput, Data: {"seq": 15, "msg": "Throughput test message from e-puck!", "timestamp": 7917536}
+Message latency (epuck/throughput): {"seq": 15, "msg": "Throughput test message from e-puck!", "timestamp": 7917536} : 1742487383801843 us
+Topic: epuck/throughput, Data: {"seq": 16, "msg": "Throughput test message from e-puck!", "timestamp": 8417537}
+Message latency (epuck/throughput): {"seq": 16, "msg": "Throughput test message from e-puck!", "timestamp": 8417537} : 1742487383302025 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390313274 us
+Topic: epuck/throughput, Data: {"seq": 17, "msg": "Throughput test message from e-puck!", "timestamp": 8917536}
+Message latency (epuck/throughput): {"seq": 17, "msg": "Throughput test message from e-puck!", "timestamp": 8917536} : 1742487382802450 us
+Topic: epuck/throughput, Data: {"seq": 18, "msg": "Throughput test message from e-puck!", "timestamp": 9417537}
+Message latency (epuck/throughput): {"seq": 18, "msg": "Throughput test message from e-puck!", "timestamp": 9417537} : 1742487382302655 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390313923 us
+Topic: epuck/throughput, Data: {"seq": 19, "msg": "Throughput test message from e-puck!", "timestamp": 9917536}
+Message latency (epuck/throughput): {"seq": 19, "msg": "Throughput test message from e-puck!", "timestamp": 9917536} : 1742487381802972 us
+Topic: epuck/throughput, Data: {"seq": 20, "msg": "Throughput test message from e-puck!", "timestamp": 10417537}
+Message latency (epuck/throughput): {"seq": 20, "msg": "Throughput test message from e-puck!", "timestamp": 10417537} : 1742487381303082 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 1406451} : 1742487390314328 us
+Topic: epuck/throughput, Data: {"seq": 21, "msg": "Throughput test message from e-puck!", "timestamp": 10917536}
+Message latency (epuck/throughput): {"seq": 21, "msg": "Throughput test message from e-puck!", "timestamp": 10917536} : 1742487380803353 us
+Topic: epuck/map, Data: {"seq": 22, "msg": "Grid Inbound", "timestamp": 10958578}
+Message latency (epuck/map): {"seq": 22, "msg": "Grid Inbound", "timestamp": 10958578} : 1742487380762426 us
+Topic: epuck/throughput, Data: {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1415653}
+Message latency (epuck/throughput): {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 1415653} : 1742487390305507 us
+Topic: epuck/throughput, Data: {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 11417537}
+Message latency (epuck/throughput): {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 11417537} : 1742487380303791 us
+Topic: epuck/throughput, Data: {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 1917536}
+Message latency (epuck/throughput): {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 1917536} : 1742487389809552 us
+Topic: epuck/map, Data: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 11865039}
+Non-JSON message on epuck/map: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 11865039}
+Topic: epuck/status, Data: {"seq": 25, "msg": "COMPLETED snake", "timestamp": 16383467}
+Message latency (epuck/status): {"seq": 25, "msg": "COMPLETED snake", "timestamp": 16383467} : 1742487375355698 us
+Topic: epuck/throughput, Data: {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 16867536}
+Message latency (epuck/throughput): {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 16867536} : 1742487375462500 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+
+--- Metrics for the last 60 seconds ---
+Throughput: 88.20 B/s
+Jitter: 20939326.78 us
+Messages Received: 72
+Lost Messages: -39
+Message Delivery Success Rate: 218.18%
+
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 2854471}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 2854471} : 1742487435372153 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 2880221}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 2880221} : 1742487435360581 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/map, Data: {"seq": 22, "msg": "Grid Inbound", "timestamp": 12498570}
+Message latency (epuck/map): {"seq": 22, "msg": "Grid Inbound", "timestamp": 12498570} : 1742487464518521 us
+Topic: epuck/throughput, Data: {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 12887537}
+Message latency (epuck/throughput): {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 12887537} : 1742487465588588 us
+Topic: epuck/throughput, Data: {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 37514616}
+Message latency (epuck/throughput): {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 37514616} : 1742487440962000 us
+Topic: epuck/map, Data: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 22516178}
+Non-JSON message on epuck/map: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 22516178}
+Topic: epuck/throughput, Data: {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 40857536}
+Message latency (epuck/throughput): {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 40857536} : 1742487437619705 us
+Topic: epuck/throughput, Data: {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 41357536}
+Message latency (epuck/throughput): {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 41357536} : 1742487437119864 us
+Topic: epuck/status, Data: {"seq": 25, "msg": "COMPLETED snake", "timestamp": 22517522}
+Message latency (epuck/status): {"seq": 25, "msg": "COMPLETED snake", "timestamp": 22517522} : 1742487455960012 us
+Topic: epuck/throughput, Data: {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 23007536}
+Message latency (epuck/throughput): {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 23007536} : 1742487455665403 us
+Topic: epuck/throughput, Data: {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 41857536}
+Message latency (epuck/throughput): {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 41857536} : 1742487436815707 us
+Topic: epuck/throughput, Data: {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 42357536}
+Message latency (epuck/throughput): {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 42357536} : 1742487436315942 us
+Topic: epuck/throughput, Data: {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 23507536}
+Message latency (epuck/throughput): {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 23507536} : 1742487455166072 us
+Topic: epuck/throughput, Data: {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 42857536}
+Message latency (epuck/throughput): {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 42857536} : 1742487435816228 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 2888050}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 2888050} : 1742487481384887 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 2895097}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 2895097} : 1742487481377959 us
+Topic: epuck/throughput, Data: {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 2896523}
+Message latency (epuck/throughput): {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 2896523} : 1742487481376690 us
+Topic: epuck/throughput, Data: {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 3397536}
+Message latency (epuck/throughput): {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 3397536} : 1742487503507397 us
+
+--- Metrics for the last 60 seconds ---
+Throughput: 25.47 B/s
+Jitter: 21332074.61 us
+Messages Received: 23
+Lost Messages: -13
+Message Delivery Success Rate: 230.00%
+
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/throughput, Data: {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 37414186}
+Message latency (epuck/throughput): {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 37414186} : 1742487483950561 us
+Topic: epuck/status, Data: {"seq": 24, "msg": "COMPLETED snake", "timestamp": 12402993}
+Message latency (epuck/status): {"seq": 24, "msg": "COMPLETED snake", "timestamp": 12402993} : 1742487508962419 us
+Topic: epuck/throughput, Data: {"seq": 25, "msg": "Throughput test message from e-puck!", "timestamp": 12897537}
+Message latency (epuck/throughput): {"seq": 25, "msg": "Throughput test message from e-puck!", "timestamp": 12897537} : 1742487508468227 us
+Topic: epuck/throughput, Data: {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 39447536}
+Message latency (epuck/throughput): {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 39447536} : 1742487481918506 us
+Topic: epuck/throughput, Data: {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 39947984}
+Message latency (epuck/throughput): {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 39947984} : 1742487481418239 us
+Topic: epuck/throughput, Data: {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 22907536}
+Message latency (epuck/throughput): {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 22907536} : 1742487498458897 us
+Topic: epuck/throughput, Data: {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 23407538}
+Message latency (epuck/throughput): {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 23407538} : 1742487497962708 us
+Topic: epuck/throughput, Data: {"seq": 28, "msg": "Throughput test message from e-puck!", "timestamp": 23907536}
+Message latency (epuck/throughput): {"seq": 28, "msg": "Throughput test message from e-puck!", "timestamp": 23907536} : 1742487497465377 us
+Topic: epuck/throughput, Data: {"seq": 29, "msg": "Throughput test message from e-puck!", "timestamp": 24407538}
+Message latency (epuck/throughput): {"seq": 29, "msg": "Throughput test message from e-puck!", "timestamp": 24407538} : 1742487498452091 us
+Topic: epuck/throughput, Data: {"seq": 30, "msg": "Throughput test message from e-puck!", "timestamp": 24907536}
+Message latency (epuck/throughput): {"seq": 30, "msg": "Throughput test message from e-puck!", "timestamp": 24907536} : 1742487497953935 us
+Topic: epuck/throughput, Data: {"seq": 31, "msg": "Throughput test message from e-puck!", "timestamp": 25408256}
+Message latency (epuck/throughput): {"seq": 31, "msg": "Throughput test message from e-puck!", "timestamp": 25408256} : 1742487497453541 us
+Topic: epuck/throughput, Data: {"seq": 32, "msg": "Throughput test message from e-puck!", "timestamp": 25907536}
+Message latency (epuck/throughput): {"seq": 32, "msg": "Throughput test message from e-puck!", "timestamp": 25907536} : 1742487496954472 us
+Topic: epuck/throughput, Data: {"seq": 33, "msg": "Throughput test message from e-puck!", "timestamp": 26407538}
+Message latency (epuck/throughput): {"seq": 33, "msg": "Throughput test message from e-puck!", "timestamp": 26407538} : 1742487496454686 us
+Topic: epuck/throughput, Data: {"seq": 34, "msg": "Throughput test message from e-puck!", "timestamp": 26907536}
+Message latency (epuck/throughput): {"seq": 34, "msg": "Throughput test message from e-puck!", "timestamp": 26907536} : 1742487495954872 us
+Topic: epuck/throughput, Data: {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 40447536}
+Message latency (epuck/throughput): {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 40447536} : 1742487482415035 us
+Topic: epuck/throughput, Data: {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 40947536}
+Message latency (epuck/throughput): {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 40947536} : 1742487481915205 us
+Topic: epuck/throughput, Data: {"seq": 35, "msg": "Throughput test message from e-puck!", "timestamp": 27407672}
+Message latency (epuck/throughput): {"seq": 35, "msg": "Throughput test message from e-puck!", "timestamp": 27407672} : 1742487495455242 us
+Topic: epuck/throughput, Data: {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 41447536}
+Message latency (epuck/throughput): {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 41447536} : 1742487481415542 us
+Topic: epuck/throughput, Data: {"seq": 36, "msg": "Throughput test message from e-puck!", "timestamp": 27907536}
+Message latency (epuck/throughput): {"seq": 36, "msg": "Throughput test message from e-puck!", "timestamp": 27907536} : 1742487494960359 us
+Topic: epuck/throughput, Data: {"seq": 37, "msg": "Throughput test message from e-puck!", "timestamp": 28407538}
+Message latency (epuck/throughput): {"seq": 37, "msg": "Throughput test message from e-puck!", "timestamp": 28407538} : 1742487495957231 us
+Topic: epuck/throughput, Data: {"seq": 38, "msg": "Throughput test message from e-puck!", "timestamp": 28907536}
+Message latency (epuck/throughput): {"seq": 38, "msg": "Throughput test message from e-puck!", "timestamp": 28907536} : 1742487495462578 us
+Topic: epuck/throughput, Data: {"seq": 39, "msg": "Throughput test message from e-puck!", "timestamp": 29407538}
+Message latency (epuck/throughput): {"seq": 39, "msg": "Throughput test message from e-puck!", "timestamp": 29407538} : 1742487494962962 us
+Topic: epuck/throughput, Data: {"seq": 40, "msg": "Throughput test message from e-puck!", "timestamp": 29907536}
+Message latency (epuck/throughput): {"seq": 40, "msg": "Throughput test message from e-puck!", "timestamp": 29907536} : 1742487494463115 us
+Topic: epuck/throughput, Data: {"seq": 41, "msg": "Throughput test message from e-puck!", "timestamp": 30407538}
+Message latency (epuck/throughput): {"seq": 41, "msg": "Throughput test message from e-puck!", "timestamp": 30407538} : 1742487493963241 us
+Topic: epuck/throughput, Data: {"seq": 42, "msg": "Throughput test message from e-puck!", "timestamp": 30907536}
+Message latency (epuck/throughput): {"seq": 42, "msg": "Throughput test message from e-puck!", "timestamp": 30907536} : 1742487493463388 us
+Topic: epuck/throughput, Data: {"seq": 43, "msg": "Throughput test message from e-puck!", "timestamp": 31407538}
+Message latency (epuck/throughput): {"seq": 43, "msg": "Throughput test message from e-puck!", "timestamp": 31407538} : 1742487492963544 us
+Topic: epuck/throughput, Data: {"seq": 44, "msg": "Throughput test message from e-puck!", "timestamp": 31907536}
+Message latency (epuck/throughput): {"seq": 44, "msg": "Throughput test message from e-puck!", "timestamp": 31907536} : 1742487492463732 us
+Topic: epuck/throughput, Data: {"seq": 45, "msg": "Throughput test message from e-puck!", "timestamp": 32407674}
+Message latency (epuck/throughput): {"seq": 45, "msg": "Throughput test message from e-puck!", "timestamp": 32407674} : 1742487491963824 us
+Topic: epuck/throughput, Data: {"seq": 61, "msg": "Throughput test message from e-puck!", "timestamp": 41947536}
+Message latency (epuck/throughput): {"seq": 61, "msg": "Throughput test message from e-puck!", "timestamp": 41947536} : 1742487482424104 us
+Topic: epuck/throughput, Data: {"seq": 62, "msg": "Throughput test message from e-puck!", "timestamp": 42447536}
+Message latency (epuck/throughput): {"seq": 62, "msg": "Throughput test message from e-puck!", "timestamp": 42447536} : 1742487481924274 us
+Topic: epuck/throughput, Data: {"seq": 46, "msg": "Throughput test message from e-puck!", "timestamp": 32907536}
+Message latency (epuck/throughput): {"seq": 46, "msg": "Throughput test message from e-puck!", "timestamp": 32907536} : 1742487491464449 us
+Topic: epuck/throughput, Data: {"seq": 63, "msg": "Throughput test message from e-puck!", "timestamp": 42947536}
+Message latency (epuck/throughput): {"seq": 63, "msg": "Throughput test message from e-puck!", "timestamp": 42947536} : 1742487481424581 us
+Topic: epuck/throughput, Data: {"seq": 47, "msg": "Throughput test message from e-puck!", "timestamp": 33407538}
+Message latency (epuck/throughput): {"seq": 47, "msg": "Throughput test message from e-puck!", "timestamp": 33407538} : 1742487490964719 us
+Topic: epuck/throughput, Data: {"seq": 48, "msg": "Throughput test message from e-puck!", "timestamp": 33907536}
+Message latency (epuck/throughput): {"seq": 48, "msg": "Throughput test message from e-puck!", "timestamp": 33907536} : 1742487490471323 us
+Topic: epuck/throughput, Data: {"seq": 49, "msg": "Throughput test message from e-puck!", "timestamp": 34407538}
+Message latency (epuck/throughput): {"seq": 49, "msg": "Throughput test message from e-puck!", "timestamp": 34407538} : 1742487489973507 us
+Topic: epuck/throughput, Data: {"seq": 50, "msg": "Throughput test message from e-puck!", "timestamp": 34907536}
+Message latency (epuck/throughput): {"seq": 50, "msg": "Throughput test message from e-puck!", "timestamp": 34907536} : 1742487489479733 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+
+--- Metrics for the last 60 seconds ---
+Throughput: 0.70 B/s
+Jitter: 0.00 us
+Messages Received: 2
+Lost Messages: 0
+Message Delivery Success Rate: 100.00%
+
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 24, "msg": "COMPLETED snake", "timestamp": 18302449}
+Message latency (epuck/status): {"seq": 24, "msg": "COMPLETED snake", "timestamp": 18302449} : 0 us
+Topic: epuck/throughput, Data: {"seq": 25, "msg": "Throughput test message from e-puck!", "timestamp": 18767537}
+Message latency (epuck/throughput): {"seq": 25, "msg": "Throughput test message from e-puck!", "timestamp": 18767537} : -464759 us
+Topic: epuck/throughput, Data: {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 43315024}
+Message latency (epuck/throughput): {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 43315024} : -25011986 us
+Topic: epuck/throughput, Data: {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 45307713}
+Message latency (epuck/throughput): {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 45307713} : -27004486 us
+Topic: epuck/throughput, Data: {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 45807679}
+Message latency (epuck/throughput): {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 45807679} : -27504301 us
+Topic: epuck/throughput, Data: {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 28807536}
+Message latency (epuck/throughput): {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 28807536} : -10504011 us
+Topic: epuck/throughput, Data: {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 29307538}
+Message latency (epuck/throughput): {"seq": 27, "msg": "Throughput test message from e-puck!", "timestamp": 29307538} : -10999405 us
+Topic: epuck/throughput, Data: {"seq": 28, "msg": "Throughput test message from e-puck!", "timestamp": 29807536}
+Message latency (epuck/throughput): {"seq": 28, "msg": "Throughput test message from e-puck!", "timestamp": 29807536} : -11493902 us
+Topic: epuck/throughput, Data: {"seq": 29, "msg": "Throughput test message from e-puck!", "timestamp": 30307538}
+Message latency (epuck/throughput): {"seq": 29, "msg": "Throughput test message from e-puck!", "timestamp": 30307538} : -11988542 us
+Topic: epuck/throughput, Data: {"seq": 30, "msg": "Throughput test message from e-puck!", "timestamp": 30807536}
+Message latency (epuck/throughput): {"seq": 30, "msg": "Throughput test message from e-puck!", "timestamp": 30807536} : -12483703 us
+Topic: epuck/throughput, Data: {"seq": 31, "msg": "Throughput test message from e-puck!", "timestamp": 31307538}
+Message latency (epuck/throughput): {"seq": 31, "msg": "Throughput test message from e-puck!", "timestamp": 31307538} : -12978641 us
+Topic: epuck/throughput, Data: {"seq": 32, "msg": "Throughput test message from e-puck!", "timestamp": 31807536}
+Message latency (epuck/throughput): {"seq": 32, "msg": "Throughput test message from e-puck!", "timestamp": 31807536} : -13473358 us
+Topic: epuck/throughput, Data: {"seq": 33, "msg": "Throughput test message from e-puck!", "timestamp": 32307538}
+Message latency (epuck/throughput): {"seq": 33, "msg": "Throughput test message from e-puck!", "timestamp": 32307538} : -13962611 us
+Topic: epuck/throughput, Data: {"seq": 34, "msg": "Throughput test message from e-puck!", "timestamp": 32807536}
+Message latency (epuck/throughput): {"seq": 34, "msg": "Throughput test message from e-puck!", "timestamp": 32807536} : -14460494 us
+Topic: epuck/throughput, Data: {"seq": 35, "msg": "Throughput test message from e-puck!", "timestamp": 33307673}
+Message latency (epuck/throughput): {"seq": 35, "msg": "Throughput test message from e-puck!", "timestamp": 33307673} : -13508664 us
+Topic: epuck/throughput, Data: {"seq": 36, "msg": "Throughput test message from e-puck!", "timestamp": 33807536}
+Message latency (epuck/throughput): {"seq": 36, "msg": "Throughput test message from e-puck!", "timestamp": 33807536} : -14006114 us
+Topic: epuck/throughput, Data: {"seq": 37, "msg": "Throughput test message from e-puck!", "timestamp": 34307538}
+Message latency (epuck/throughput): {"seq": 37, "msg": "Throughput test message from e-puck!", "timestamp": 34307538} : -14505926 us
+Topic: epuck/throughput, Data: {"seq": 38, "msg": "Throughput test message from e-puck!", "timestamp": 34807536}
+Message latency (epuck/throughput): {"seq": 38, "msg": "Throughput test message from e-puck!", "timestamp": 34807536} : -15005786 us
+Topic: epuck/throughput, Data: {"seq": 39, "msg": "Throughput test message from e-puck!", "timestamp": 35307538}
+Message latency (epuck/throughput): {"seq": 39, "msg": "Throughput test message from e-puck!", "timestamp": 35307538} : -15505598 us
+Topic: epuck/throughput, Data: {"seq": 40, "msg": "Throughput test message from e-puck!", "timestamp": 35807536}
+Message latency (epuck/throughput): {"seq": 40, "msg": "Throughput test message from e-puck!", "timestamp": 35807536} : -16005458 us
+Topic: epuck/throughput, Data: {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 46307777}
+Message latency (epuck/throughput): {"seq": 58, "msg": "Throughput test message from e-puck!", "timestamp": 46307777} : -26505548 us
+Topic: epuck/throughput, Data: {"seq": 41, "msg": "Throughput test message from e-puck!", "timestamp": 36307538}
+Message latency (epuck/throughput): {"seq": 41, "msg": "Throughput test message from e-puck!", "timestamp": 36307538} : -16505192 us
+Topic: epuck/throughput, Data: {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 46807745}
+Message latency (epuck/throughput): {"seq": 59, "msg": "Throughput test message from e-puck!", "timestamp": 46807745} : -27005286 us
+Topic: epuck/throughput, Data: {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 47307721}
+Message latency (epuck/throughput): {"seq": 60, "msg": "Throughput test message from e-puck!", "timestamp": 47307721} : -27505145 us
+Topic: epuck/throughput, Data: {"seq": 42, "msg": "Throughput test message from e-puck!", "timestamp": 36807536}
+Message latency (epuck/throughput): {"seq": 42, "msg": "Throughput test message from e-puck!", "timestamp": 36807536} : -16999762 us
+Topic: epuck/throughput, Data: {"seq": 43, "msg": "Throughput test message from e-puck!", "timestamp": 37307538}
+Message latency (epuck/throughput): {"seq": 43, "msg": "Throughput test message from e-puck!", "timestamp": 37307538} : -17494256 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+
+--- Metrics for the last 60 seconds ---
+Throughput: 36.65 B/s
+Jitter: 7317448.49 us
+Messages Received: 30
+Lost Messages: -6
+Message Delivery Success Rate: 125.00%
+
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 29320136}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 29320136} : 0 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/throughput, Data: {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 63915399}
+Message latency (epuck/throughput): {"seq": 55, "msg": "Throughput test message from e-puck!", "timestamp": 63915399} : 3070174 us
+Topic: epuck/map, Data: {"seq": 22, "msg": "Grid Inbound", "timestamp": 38898570}
+Message latency (epuck/map): {"seq": 22, "msg": "Grid Inbound", "timestamp": 38898570} : 29236499 us
+Topic: epuck/throughput, Data: {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 39347537}
+Message latency (epuck/throughput): {"seq": 23, "msg": "Throughput test message from e-puck!", "timestamp": 39347537} : 28792528 us
+Topic: epuck/throughput, Data: {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 67307536}
+Message latency (epuck/throughput): {"seq": 56, "msg": "Throughput test message from e-puck!", "timestamp": 67307536} : 832769 us
+Topic: epuck/map, Data: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 48916242}
+Non-JSON message on epuck/map: {"seq": 24, "msg": "1 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+0 0 0 0 0 
+", "timestamp": 48916242}
+Topic: epuck/status, Data: {"seq": 25, "msg": "COMPLETED snake", "timestamp": 48917590}
+Message latency (epuck/status): {"seq": 25, "msg": "COMPLETED snake", "timestamp": 48917590} : 19223127 us
+Topic: epuck/throughput, Data: {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 67807536}
+Message latency (epuck/throughput): {"seq": 57, "msg": "Throughput test message from e-puck!", "timestamp": 67807536} : 333401 us
+Topic: epuck/throughput, Data: {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 49407536}
+Message latency (epuck/throughput): {"seq": 26, "msg": "Throughput test message from e-puck!", "timestamp": 49407536} : 20228016 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+
+--- Metrics for the last 60 seconds ---
+Throughput: 13.47 B/s
+Jitter: 12980387.74 us
+Messages Received: 13
+Lost Messages: 19
+Message Delivery Success Rate: 40.62%
+
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 27498189}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 27498189} : 0 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 27503352}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 27503352} : -1904 us
+Topic: epuck/status, Data: New Iteration started
+Non-JSON message on epuck/status: New Iteration started
+Topic: epuck/status, Data: New Iteration Starterd [mqttPublish]
+Non-JSON message on epuck/status: New Iteration Starterd [mqttPublish]
+Topic: epuck/status, Data: {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 8858858}
+Message latency (epuck/status): {"seq": 0, "msg": "Hello From App - we are live", "timestamp": 8858858} : 47506859 us
+Topic: epuck/status, Data: {"seq": 1, "msg": "We are live from epuck1", "timestamp": 8879009}
+Message latency (epuck/status): {"seq": 1, "msg": "We are live from epuck1", "timestamp": 8879009} : 47497799 us
+Topic: epuck/throughput, Data: {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 8890692}
+Message latency (epuck/throughput): {"seq": 2, "msg": "Throughput test message from e-puck!", "timestamp": 8890692} : 47498639 us
+Topic: epuck/throughput, Data: {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 9387536}
+Message latency (epuck/throughput): {"seq": 3, "msg": "Throughput test message from e-puck!", "timestamp": 9387536} : 47500708 us

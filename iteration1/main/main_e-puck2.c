@@ -42,14 +42,16 @@
  static const char *TAG = "wifi_station";
  
 
+// Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
+static uint16_t sensor_samples[NUM_IR_SENSORS][NUM_SAMPLES] = {0};
+static uint8_t sample_index[NUM_IR_SENSORS] = {0};
 
- // Event group to signal when connected
+// Event group to signal when connected
 static EventGroupHandle_t wifi_event_group;
 const int CONNECTED_BIT = BIT0;
 
 // Wi-Fi event handler
-static void event_handler(void *arg, esp_event_base_t event_base,
-                          int32_t event_id, void *event_data)
+static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT) {
         if (event_id == WIFI_EVENT_STA_START) {
@@ -130,10 +132,6 @@ static void wifi_init_sta(void)
         ESP_LOGI(TAG, "Connected to AP: %s", WIFI_SSID);
     }
 }
-
- // Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
- static uint16_t sensor_samples[NUM_IR_SENSORS][NUM_SAMPLES] = {0};
- static uint8_t sample_index[NUM_IR_SENSORS] = {0};
 
  static uint16_t moving_average(uint16_t new_value, int sensor_index) {
 	sensor_samples[sensor_index][sample_index[sensor_index]] = new_value;
@@ -333,44 +331,55 @@ void snake_movement_task(void *pvParameter) {
 
 // Add this function to your C code.
 void throughput_task(void *pvParameter) {
-    while (1) {
-        // Publish a message on a dedicated topic.
-        // You could use a fixed payload, or build one dynamically.
-        // publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
-        // Publish every 100 ms (adjust as needed).
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}
-
-void metrics_logging_task(void *pvParameter) {
     char metrics_payload[256];
+    uint32_t elapsed_ms = 0;
+    const uint32_t interval_ms = 30000; // 30 seconds interval
+
     while (1) {
-        // Construct the JSON payload with the metrics.
-        snprintf(metrics_payload, sizeof(metrics_payload),
-                 "{\"messages_published\": %ld, \"bytes_published\": %ld, \"publish_errors\": %ld}",
-                 messages_published, bytes_published, publish_errors);
+        // Publish a throughput test message every 500 ms.
+        // publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
         
-        // Publish the metrics on the "epuck/metrics" topic.
-        publish_with_timestamp("epuck/metrics", metrics_payload);
+        // // Delay 500 ms.
+        // vTaskDelay(pdMS_TO_TICKS(500));
+        // elapsed_ms += 500;
         
-        // Optionally, also log to serial for debugging.
-        ESP_LOGI("METRICS", "Published metrics: %s", metrics_payload);
-        
-        // Reset the counters if you want per-interval stats.
-        messages_published = 0;
-        bytes_published = 0;
-        publish_errors = 0;
-        
-        // Delay 30 seconds before publishing metrics again.
-        vTaskDelay(pdMS_TO_TICKS(30000));
+        // // Check if 30 seconds have elapsed.
+        // if (elapsed_ms >= interval_ms) {
+        //     // Construct the JSON payload with the metrics.
+        //     snprintf(metrics_payload, sizeof(metrics_payload),"{\"messages_published\": %lu, \"bytes_published\": %lu, \"publish_errors\": %lu}",messages_published, bytes_published, publish_errors);
+
+            
+        //     // Publish the metrics on the "epuck/metrics" topic.
+        //     publish_with_timestamp("epuck/metrics", metrics_payload);
+            
+        //     // Optionally, also log to serial for debugging.
+        //     ESP_LOGI("METRICS", "Published metrics: %s", metrics_payload);
+            
+        //     // Reset the counters and elapsed time.
+        //     messages_published = 0;void publish_with_timestamp(const char* topic, const char* msg) {
+        //         // Get current time in microseconds.
+        //         int64_t timestamp = esp_timer_get_time();
+                
+        //         // Prepare a payload with the message and timestamp.
+        //         char payload[256];
+        //         snprintf(payload, sizeof(payload), "{\"msg\":\"%s\", \"timestamp\": %lld}", msg, timestamp);
+                
+        //         // Publish using your existing MQTT publish function.
+        //         mqtt_publish(topic, payload);
+        //     }
+        //     bytes_published = 0;
+        //     publish_errors = 0;
+        //     elapsed_ms = 0;
+        // }
     }
 }
 
- void app_main(void)
- {
-    
+
+void app_main(void)
+{
+
     mqtt_connected_sem = xSemaphoreCreateBinary();
-    
+
     // Initialize hardware (UART, LEDs, button, etc.)
     uart_init();     // Sets up the UART to communicate with the STM32.
     rgb_init();      // Optional: for LED feedback.
@@ -378,23 +387,24 @@ void metrics_logging_task(void *pvParameter) {
     init_occupancy_grid(); // Initialize the occupancy grid.
     wifi_init_sta();
     mqtt_app_start();
- 
+
     xSemaphoreTake(mqtt_connected_sem, portMAX_DELAY);
+    mqtt_publish("epuck/status", "we are live");
     publish_with_timestamp("epuck/status", "Hello From App - we are live");
     publish_with_timestamp("epuck/status", "We are live from epuck1");
 
     // Update the occupancy grid with the simulated data.
     // xTaskCreatePinnedToCore(metrics_logging_task, "metrics_logging_task", 2048, NULL, 4, NULL, 0);
-    xTaskCreatePinnedToCore(sensor_task, "sensor_task", 2048, NULL, 4, NULL, 0);
+    // xTaskCreatePinnedToCore(sensor_task, "sensor_task", 2048, NULL, 4, NULL, 0);
     xTaskCreatePinnedToCore(snake_movement_task, "snake_movement_task", 4096, NULL, 4, NULL, 1);
     xTaskCreatePinnedToCore(throughput_task, "throughput_task", 2048, NULL, 4, NULL, 0);
     print_occupancy_grid();
-	 
-//  publish_with_timestamp("epuck/status", "[Hello from e-puck!]");
+        
+    //  publish_with_timestamp("epuck/status", "[Hello from e-puck!]");
 
 
     // Main task can perform other operations or remain idle.
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
- }
+}
