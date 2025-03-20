@@ -21,6 +21,7 @@
 #include "mapping.h"
 #include "mqtt_app.h"
 #include "esp_wifi.h"
+#include "freertos/semphr.h"
  
  #define IR_PROX_OFFSET  40    // Starting byte index for IR sensor data in the sensor packet
  #define NUM_IR_SENSORS  8     // e-puck2 has 8 IR sensors
@@ -39,6 +40,8 @@
  #define THROUGHPUT_TOPIC "epuck/throughput"
 
  static const char *TAG = "wifi_station";
+ 
+
 
  // Event group to signal when connected
 static EventGroupHandle_t wifi_event_group;
@@ -149,7 +152,7 @@ static void sensor_task(void *pvParameter)
 		 // Fetch the next sensor packet (104 bytes expected).
 		 sensors_buffer_t *sensor_buff = uart_get_data_ptr();
 		 
-		 printf("\r\nIR Sensor Values (Moving Average over %d samples):\r\n", NUM_SAMPLES);
+		//  printf("\r\nIR Sensor Values (Moving Average over %d samples):\r\n", NUM_SAMPLES);
 		 for (int i = 0; i < NUM_IR_SENSORS; i++) {
 			 // Combine two bytes to form an unsigned 16-bit integer.
 			 uint16_t raw_value = sensor_buff->data[IR_PROX_OFFSET + 2*i] |
@@ -161,10 +164,10 @@ static void sensor_task(void *pvParameter)
 			 uint16_t filtered_value = moving_average(ir_value, i);
 			 
 			 // Print both the raw and filtered sensor values.
-			 printf("  Sensor %d: raw=0x%04X, IR value=%d, filtered=%d\r\n",
-					i, raw_value, ir_value, filtered_value);
+			//  printf("  Sensor %d: raw=0x%04X, IR value=%d, filtered=%d\r\n",
+					// i, raw_value, ir_value, filtered_value);
 		 }
-		 printf("Note: Higher filtered values indicate a closer or more reflective object.\r\n");
+		//  printf("Note: Higher filtered values indicate a closer or more reflective object.\r\n");
  
 		 // Delay 1 second before the next reading.
 		 vTaskDelay(pdMS_TO_TICKS(1000));
@@ -267,7 +270,7 @@ void occupancy_grid_to_string(char *buffer, size_t buffer_size) {
 // Snaking movement task: covers the designated area in a snake-like pattern.
 void snake_movement_task(void *pvParameter) {
 	char grid_str[GRID_BUFFER_SIZE];
-    const int numRows = 5;      // Number of rows to cover; adjust as needed.
+    const int numRows = 1;      // Number of rows to cover; adjust as needed.
     int currentRow = 0;
     bool movingEast = true;     // Starting direction: assume robot initially faces east (right).
 
@@ -280,8 +283,8 @@ void snake_movement_task(void *pvParameter) {
         // 1. Move straight along the current row.
         printf("Row %d: Moving straight...\n", currentRow);
         // Adjust the duration so the robot covers the row's length.
-        straight_movement_task(200);  // Move forward for 2000 ms; calibrate as needed.
-        vTaskDelay(pdMS_TO_TICKS(190));  // Brief pause.
+        straight_movement_task(2000);  // Move forward for 2000 ms; calibrate as needed.
+        vTaskDelay(pdMS_TO_TICKS(500));  // Brief pause.
         
         // 2. Turn 90° to begin row transition.
         if (movingEast) {
@@ -289,12 +292,12 @@ void snake_movement_task(void *pvParameter) {
         } else {
             imu_turn_90(-1);  // Turn left 90°.
         }
-        vTaskDelay(pdMS_TO_TICKS(100));  // Short pause after turning.
+        vTaskDelay(pdMS_TO_TICKS(200));  // Short pause after turning.
         
         // 3. Move forward a short distance to shift to the next row.
         printf("Row %d: Shifting to next row...\n", currentRow);
-        straight_movement_task(200);   // Move sideways for 500 ms; adjust for proper lateral shift.
-        vTaskDelay(pdMS_TO_TICKS(100));
+        straight_movement_task(500);   // Move sideways for 500 ms; adjust for proper lateral shift.
+        vTaskDelay(pdMS_TO_TICKS(200));
         
         // 4. Turn 90° again to reorient for moving along the new row.
         if (movingEast) {
@@ -302,9 +305,13 @@ void snake_movement_task(void *pvParameter) {
         } else {
             imu_turn_90(-1);  // Turn left to face east.
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(200));
         
         // 5. Toggle horizontal direction and move to the next row.
+        update_occupancy_grid(0, currentRow);
+        occupancy_grid_to_string(grid_str, sizeof(grid_str));
+        publish_with_timestamp("epuck/map", "Grid Inbound");
+        publish_with_timestamp("epuck/map", grid_str);
         movingEast = !movingEast;
         currentRow++;
     }
@@ -312,10 +319,12 @@ void snake_movement_task(void *pvParameter) {
     // When the snaking pattern is complete, stop the robot.
     set_speed(0);
     printf("Snaking pattern complete.\n");
-	mqtt_publish("epuck/status", "COMPLETE snake");
+	// mqtt_publish("epuck/status", "COMPLETE snake");
 	
 	occupancy_grid_to_string(grid_str, sizeof(grid_str));
-	mqtt_publish("epuck/map", grid_str);
+	// mqtt_publish("epuck/map", grid_str);
+    publish_with_timestamp("epuck/status", "COMPLETED snake");
+
     
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -327,36 +336,65 @@ void throughput_task(void *pvParameter) {
     while (1) {
         // Publish a message on a dedicated topic.
         // You could use a fixed payload, or build one dynamically.
-        publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
+        // publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
         // Publish every 100 ms (adjust as needed).
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
- 
+
+void metrics_logging_task(void *pvParameter) {
+    char metrics_payload[256];
+    while (1) {
+        // Construct the JSON payload with the metrics.
+        snprintf(metrics_payload, sizeof(metrics_payload),
+                 "{\"messages_published\": %ld, \"bytes_published\": %ld, \"publish_errors\": %ld}",
+                 messages_published, bytes_published, publish_errors);
+        
+        // Publish the metrics on the "epuck/metrics" topic.
+        publish_with_timestamp("epuck/metrics", metrics_payload);
+        
+        // Optionally, also log to serial for debugging.
+        ESP_LOGI("METRICS", "Published metrics: %s", metrics_payload);
+        
+        // Reset the counters if you want per-interval stats.
+        messages_published = 0;
+        bytes_published = 0;
+        publish_errors = 0;
+        
+        // Delay 30 seconds before publishing metrics again.
+        vTaskDelay(pdMS_TO_TICKS(30000));
+    }
+}
+
  void app_main(void)
  {
-	 // Initialize hardware (UART, LEDs, button, etc.)
-	 uart_init();     // Sets up the UART to communicate with the STM32.
-	 rgb_init();      // Optional: for LED feedback.
-	 button_init();   // Optional: for reading the button state.
-	 init_occupancy_grid(); // Initialize the occupancy grid.
-	 wifi_init_sta();
-     mqtt_app_start();
+    
+    mqtt_connected_sem = xSemaphoreCreateBinary();
+    
+    // Initialize hardware (UART, LEDs, button, etc.)
+    uart_init();     // Sets up the UART to communicate with the STM32.
+    rgb_init();      // Optional: for LED feedback.
+    button_init();   // Optional: for reading the button state.
+    init_occupancy_grid(); // Initialize the occupancy grid.
+    wifi_init_sta();
+    mqtt_app_start();
+ 
+    xSemaphoreTake(mqtt_connected_sem, portMAX_DELAY);
+    publish_with_timestamp("epuck/status", "Hello From App - we are live");
+    publish_with_timestamp("epuck/status", "We are live from epuck1");
 
-	 float data = 0.3;
-
-	 // Update the occupancy grid with the simulated data.
-	 xTaskCreatePinnedToCore(sensor_task, "sensor_task", 2048, NULL, 4, NULL, 0);
-	 xTaskCreatePinnedToCore(snake_movement_task, "snake_movement_task", 4096, NULL, 4, NULL, 1);
-	 xTaskCreatePinnedToCore(throughput_task, "throughput_task", 2048, NULL, 4, NULL, 0);
-	 update_occupancy_grid(data, 2);
-	 print_occupancy_grid();
+    // Update the occupancy grid with the simulated data.
+    // xTaskCreatePinnedToCore(metrics_logging_task, "metrics_logging_task", 2048, NULL, 4, NULL, 0);
+    xTaskCreatePinnedToCore(sensor_task, "sensor_task", 2048, NULL, 4, NULL, 0);
+    xTaskCreatePinnedToCore(snake_movement_task, "snake_movement_task", 4096, NULL, 4, NULL, 1);
+    xTaskCreatePinnedToCore(throughput_task, "throughput_task", 2048, NULL, 4, NULL, 0);
+    print_occupancy_grid();
 	 
-	 publish_with_timestamp("epuck/status", "[Hello from e-puck!]");
+//  publish_with_timestamp("epuck/status", "[Hello from e-puck!]");
 
-  
-	 // Main task can perform other operations or remain idle.
-	 while(1) {
-		  vTaskDelay(pdMS_TO_TICKS(1000));
-	 }
+
+    // Main task can perform other operations or remain idle.
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
  }

@@ -7,15 +7,40 @@ static const char *TAG = "MQTT";
 
 // Make the MQTT client global.
 static esp_mqtt_client_handle_t mqtt_client = NULL;
+SemaphoreHandle_t mqtt_connected_sem = NULL;
+uint32_t messages_published = 0;
+uint32_t bytes_published = 0;
+uint32_t publish_errors = 0;
+
+void mqtt_publish(const char *topic, const char *data)
+{
+    if (mqtt_client) {
+        int msg_id = esp_mqtt_client_publish(mqtt_client, topic, data, 0, 1, 0);
+        if (msg_id < 0) {
+            ESP_LOGE(TAG, "Publish error on topic %s", topic);
+            publish_errors++;
+        } else {
+            messages_published++;
+            bytes_published += strlen(data);
+        }
+    } else {
+        ESP_LOGE(TAG, "MQTT client not initialized");
+        publish_errors++;
+    }
+}
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event = event_data;
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
+        
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+            xSemaphoreGive(mqtt_connected_sem);
+            esp_mqtt_client_publish(event->client, "epuck/status", "New Iteration started", 0, 1, 0);
+            mqtt_publish("epuck/status", "New Iteration Starterd [mqttPublish]");
             esp_mqtt_client_subscribe(event->client, "epuck/cmd", 0);
-            esp_mqtt_client_publish(event->client, "epuck/status", "Hello from e-puck! [MQTT FUNC]", 0, 1, 0);
+            // esp_mqtt_client_publish(event->client, "epuck/status", "Hello from e-puck! [MQTT FUNC]", 0, 1, 0);
             break;
             
         case MQTT_EVENT_DATA:
@@ -54,14 +79,7 @@ void mqtt_app_start(void)
     esp_mqtt_client_start(mqtt_client);
 }
 
-void mqtt_publish(const char *topic, const char *data)
-{
-    if (mqtt_client) {
-        esp_mqtt_client_publish(mqtt_client, topic, data, 0, 1, 0);
-    } else {
-        ESP_LOGE(TAG, "MQTT client not initialized");
-    }
-}
+
 
 
 // Optionally include a JSON library if you want more flexibility

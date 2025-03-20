@@ -1,0 +1,12 @@
+# Ignore build output directory (typical for ESP-IDF projects)
+build/
+
+# Ignore common output artifacts
+*.o
+*.elf
+*.bin
+*.map
+
+# Ignore temporary files
+*.log
+*.tmp
