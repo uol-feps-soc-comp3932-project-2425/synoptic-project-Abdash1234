@@ -22,6 +22,9 @@
 #include "mqtt_app.h"
 #include "esp_wifi.h"
 #include "freertos/semphr.h"
+#include "esp_sntp.h"
+#include "esp_log.h"
+#include <sys/time.h>
  
  #define IR_PROX_OFFSET  40    // Starting byte index for IR sensor data in the sensor packet
  #define NUM_IR_SENSORS  8     // e-puck2 has 8 IR sensors
@@ -40,6 +43,7 @@
  #define THROUGHPUT_TOPIC "epuck/throughput"
 
  static const char *TAG = "wifi_station";
+ static const char *SNTP_TAG = "sntp";
  
 
 // Circular buffers to hold the last NUM_SAMPLES readings for each sensor.
@@ -132,6 +136,42 @@ static void wifi_init_sta(void)
         ESP_LOGI(TAG, "Connected to AP: %s", WIFI_SSID);
     }
 }
+
+// Initialize SNTP and set the NTP server.
+void initialize_sntp(void) {
+    ESP_LOGI(SNTP_TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+}
+
+void obtain_time(void) {
+    initialize_sntp();
+    time_t now = 0;
+    const int timeout_seconds = 20;  // maximum time to wait for sync
+    int retry = 0;
+    const int retry_delay_ms = 2000;  // delay between retries
+    const int max_retries = timeout_seconds * 1000 / retry_delay_ms;
+    
+    while (retry < max_retries) {
+        time(&now);
+        if (now > 1483228800) {  // time is set (year > 2017)
+            break;
+        }
+        ESP_LOGI(SNTP_TAG, "Waiting for system time to be set... (%d/%d)", retry+1, max_retries);
+        vTaskDelay(pdMS_TO_TICKS(retry_delay_ms));
+        retry++;
+    }
+    
+    if (retry >= max_retries) {
+        ESP_LOGW(SNTP_TAG, "System time not set after %d seconds, check network/SNTP configuration", timeout_seconds);
+    } else {
+        struct tm timeinfo = {0};
+        localtime_r(&now, &timeinfo);
+        ESP_LOGI(SNTP_TAG, "Time synchronized: %s", asctime(&timeinfo));
+    }
+}
+
 
  static uint16_t moving_average(uint16_t new_value, int sensor_index) {
 	sensor_samples[sensor_index][sample_index[sensor_index]] = new_value;
@@ -268,7 +308,7 @@ void occupancy_grid_to_string(char *buffer, size_t buffer_size) {
 // Snaking movement task: covers the designated area in a snake-like pattern.
 void snake_movement_task(void *pvParameter) {
 	char grid_str[GRID_BUFFER_SIZE];
-    const int numRows = 1;      // Number of rows to cover; adjust as needed.
+    const int numRows = 6;      // Number of rows to cover; adjust as needed.
     int currentRow = 0;
     bool movingEast = true;     // Starting direction: assume robot initially faces east (right).
 
@@ -331,48 +371,40 @@ void snake_movement_task(void *pvParameter) {
 
 // Add this function to your C code.
 void throughput_task(void *pvParameter) {
-    char metrics_payload[256];
-    uint32_t elapsed_ms = 0;
-    const uint32_t interval_ms = 30000; // 30 seconds interval
+    // char metrics_payload[256];
+    // uint32_t elapsed_ms = 0;
+    // const uint32_t interval_ms = 30000; // 30 seconds interval
 
     while (1) {
         // Publish a throughput test message every 500 ms.
-        // publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
+        publish_with_timestamp(THROUGHPUT_TOPIC, "Throughput test message from e-puck!");
         
-        // // Delay 500 ms.
-        // vTaskDelay(pdMS_TO_TICKS(500));
+        // Delay 500 ms.
+        vTaskDelay(pdMS_TO_TICKS(500));
         // elapsed_ms += 500;
         
         // // Check if 30 seconds have elapsed.
         // if (elapsed_ms >= interval_ms) {
         //     // Construct the JSON payload with the metrics.
-        //     snprintf(metrics_payload, sizeof(metrics_payload),"{\"messages_published\": %lu, \"bytes_published\": %lu, \"publish_errors\": %lu}",messages_published, bytes_published, publish_errors);
-
+        //     snprintf(metrics_payload, sizeof(metrics_payload),
+        //              "{\"messages_published\": %lu, \"bytes_published\": %lu, \"publish_errors\": %lu}",
+        //              messages_published, bytes_published, publish_errors);
             
         //     // Publish the metrics on the "epuck/metrics" topic.
         //     publish_with_timestamp("epuck/metrics", metrics_payload);
             
-        //     // Optionally, also log to serial for debugging.
+        //     // Optionally log the published metrics.
         //     ESP_LOGI("METRICS", "Published metrics: %s", metrics_payload);
             
         //     // Reset the counters and elapsed time.
-        //     messages_published = 0;void publish_with_timestamp(const char* topic, const char* msg) {
-        //         // Get current time in microseconds.
-        //         int64_t timestamp = esp_timer_get_time();
-                
-        //         // Prepare a payload with the message and timestamp.
-        //         char payload[256];
-        //         snprintf(payload, sizeof(payload), "{\"msg\":\"%s\", \"timestamp\": %lld}", msg, timestamp);
-                
-        //         // Publish using your existing MQTT publish function.
-        //         mqtt_publish(topic, payload);
-        //     }
+        //     messages_published = 0;
         //     bytes_published = 0;
         //     publish_errors = 0;
         //     elapsed_ms = 0;
         // }
     }
 }
+
 
 
 void app_main(void)
@@ -386,6 +418,8 @@ void app_main(void)
     button_init();   // Optional: for reading the button state.
     init_occupancy_grid(); // Initialize the occupancy grid.
     wifi_init_sta();
+    // Synchronize system time.
+    obtain_time();
     mqtt_app_start();
 
     xSemaphoreTake(mqtt_connected_sem, portMAX_DELAY);

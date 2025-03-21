@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include <string.h>
 #include "esp_timer.h"
+#include <sys/time.h>  
 
 static const char *TAG = "MQTT";
 
@@ -87,21 +88,15 @@ void mqtt_app_start(void)
 // #include "cJSON.h"
 
 void publish_with_timestamp(const char* topic, const char* msg) {
-    // Get current time in microseconds.
-    int64_t timestamp = esp_timer_get_time();
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t timestamp = (int64_t)tv.tv_sec * 1000000LL + tv.tv_usec;
     
-    // Prepare a payload with the sequence number, message, and timestamp.
-    // Use %u for the sequence number (uint32_t) and %lld for the timestamp.
     char payload[256];
-    // snprintf(payload, sizeof(payload), "{\"seq\": %lu, \"msg\": \"%s\", \"timestamp\": %lld}", msg_seq++, msg, timestamp);
-    // snprintf(payload, sizeof(payload), "{\"msg\":\"%s\", \"timestamp\": %lld}", msg, timestamp);
     snprintf(payload, sizeof(payload),
          "{\"seq\": %lu, \"msg\": \"%s\", \"timestamp\": %lld}",
          (unsigned long)msg_seq++, msg, timestamp);
-
-
     
-    // Publish using your existing MQTT publish function.
     mqtt_publish(topic, payload);
 }
 

@@ -57,9 +57,9 @@ def on_message(client, userdata, msg):
                 base_monotonic = current_monotonic
                 base_sent_timestamp = sent_timestamp
 
-            elapsed_receiver = current_monotonic - base_monotonic
-            elapsed_sender = sent_timestamp - base_sent_timestamp
-            latency = elapsed_receiver - elapsed_sender
+            current_time_us = int(time.time() * 1e6)
+            latency = current_time_us - sent_timestamp
+
 
             latency_msg = f"Message latency ({msg.topic}): {msg.payload.decode('utf-8')} : {latency} us"
             print(latency_msg)
