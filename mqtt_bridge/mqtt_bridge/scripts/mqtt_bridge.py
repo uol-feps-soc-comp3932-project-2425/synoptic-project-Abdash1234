@@ -4,6 +4,7 @@ import rospy
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
+import statistics
 
 # MQTT settings
 MQTT_BROKER = "localhost"
@@ -24,6 +25,14 @@ throughput_counters = {
     "imu": 0,
 }
 
+# Global latency records (latency recorded per topic)
+latency_records = {
+    "battery": [],
+    "odom": [],
+    "scan": [],
+    "imu": []
+}
+
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
@@ -42,7 +51,7 @@ def battery_callback(batt_msg):
     current_time = rospy.Time.now().to_sec()
     original_stamp = batt_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("Battery Message latency: %.3f seconds", latency)
+    latency_records["battery"].append(latency)
 
     data = {
         "header": {
@@ -68,7 +77,7 @@ def odom_callback(odom_msg):
     current_time = rospy.Time.now().to_sec()
     original_stamp = odom_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("Odometry Message latency: %.3f seconds", latency)
+    latency_records["odom"].append(latency)
 
     data = {
         "header": {
@@ -105,7 +114,7 @@ def scan_callback(scan_msg):
     current_time = rospy.Time.now().to_sec()
     original_stamp = scan_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("LaserScan Message latency: %.3f seconds", latency)
+    latency_records["scan"].append(latency)
 
     data = {
         "header": {
@@ -133,7 +142,9 @@ def imu_callback(imu_msg):
     original_stamp = imu_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
     rospy.loginfo("IMU Message latency: %.3f seconds", latency)
+    latency_records["imu"].append(latency)
 
+    
     data = {
         "header": {
             "frame_id": imu_msg.header.frame_id,
@@ -162,12 +173,12 @@ def imu_callback(imu_msg):
     payload = json.dumps(data)
     helper("imu",payload,latency,MQTT_IMU)
 
+# Helper functions
 def sendLatencyData(source,latency):
         latency_data = {
         "source": source,
         "latency": latency
     }
-        
         mqtt_client.publish(MQTT_LATENCY, str(latency_data))
 
 def sendBandwidth(source, payload):
@@ -188,28 +199,43 @@ def helper(source,payload,latency,msg):
     sendLatencyData(source,latency)
     mqtt_client.publish(msg, payload)
 
-
-
-# Timer callback to log and reset throughput counters
 def log_throughput(event):
-    global throughput_counters
-    interval = event.current_real.to_sec() - event.last_real.to_sec() if event.last_real else 1.0
+    global throughput_counters, latency_records
+    interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
     battery_throughput = throughput_counters["battery"] / interval
     odom_throughput = throughput_counters["odom"] / interval
     scan_throughput = throughput_counters["scan"] / interval
     imu_throughput = throughput_counters["imu"] / interval
 
     throughput_data = {
-        "battery": battery_throughput,
-        "odom": odom_throughput,
-        "scan": scan_throughput,
-        "imu": imu_throughput
+        "battery_msg_per_sec": battery_throughput,
+        "odom_msg_per_sec": odom_throughput,
+        "scan_msg_per_sec": scan_throughput,
+        "imu_msg_per_sec": imu_throughput,
     }
-    rospy.loginfo("Throughput (msg/sec): %s", throughput_data)
-    # Optionally publish throughput metrics to MQTT
-    mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(throughput_data))
     
-    # Reset counters
+    # Now calculate latency stats (mean, stdev, jitter) for each topic
+    jitter_data = {}
+    for topic in latency_records:
+        if latency_records[topic]:
+            mean_latency = statistics.mean(latency_records[topic])
+            stdev_latency = statistics.stdev(latency_records[topic]) if len(latency_records[topic]) > 1 else 0.0
+            jitter = max(latency_records[topic]) - min(latency_records[topic])
+        else:
+            mean_latency = stdev_latency = jitter = 0.0
+        jitter_data[topic + "_latency_mean"] = mean_latency
+        jitter_data[topic + "_latency_stdev"] = stdev_latency
+        jitter_data[topic + "_jitter"] = jitter
+        latency_records[topic].clear()  # Reset for the next interval
+
+    metrics = {
+        "throughput": throughput_data,
+        "latency": jitter_data
+    }
+    rospy.loginfo("Metrics: %s", metrics)
+    mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(metrics))
+    
+    # Reset throughput counters
     throughput_counters["battery"] = 0
     throughput_counters["odom"] = 0
     throughput_counters["scan"] = 0
