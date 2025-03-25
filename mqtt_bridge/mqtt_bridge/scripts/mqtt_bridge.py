@@ -49,6 +49,14 @@ bandwidth_counters = {
     "imu": 0,
 }
 
+# Global processing overhead records (processing time per callback for each topic)
+processing_records = {
+    "battery": [],
+    "odom": [],
+    "scan": [],
+    "imu": []
+}
+
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
@@ -61,6 +69,7 @@ mqtt_client.on_message = on_mqtt_message
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
     
+    start_time = rospy.Time.now().to_sec()
     global throughput_counters
     throughput_counters["battery"] += 1
 
@@ -83,10 +92,14 @@ def battery_callback(batt_msg):
     }
     payload = json.dumps(data)
     helper("battery",payload,latency,MQTT_BATTERY)
+    finish_time = rospy.Time.now().to_sec()
+    calcProcessingTime(start_time, finish_time, "battery")
 
 # Callback for Odometry messages
 def odom_callback(odom_msg):
-        
+
+    start_time = rospy.Time.now().to_sec()
+
     global throughput_counters
     throughput_counters["odom"] += 1
 
@@ -121,9 +134,14 @@ def odom_callback(odom_msg):
     payload = json.dumps(data)
     helper("odom",payload,latency,MQTT_ODOM)
 
+    finish_time = rospy.Time.now().to_sec()
+    calcProcessingTime(start_time, finish_time, "odom")
+
 # Callback for LaserScan messages
 def scan_callback(scan_msg):
-        
+    
+    start_time = rospy.Time.now().to_sec()
+
     global throughput_counters
     throughput_counters["scan"] += 1
 
@@ -148,9 +166,14 @@ def scan_callback(scan_msg):
     payload = json.dumps(data)
     helper("scan",payload,latency,MQTT_SCAN)
 
+    finish_time = rospy.Time.now().to_sec()
+    calcProcessingTime(start_time, finish_time, "scan")
+
 # Callback for IMU messages
 def imu_callback(imu_msg):
         
+    start_time = rospy.Time.now().to_sec()
+ 
     global throughput_counters
     throughput_counters["imu"] += 1
 
@@ -189,6 +212,9 @@ def imu_callback(imu_msg):
     payload = json.dumps(data)
     helper("imu",payload,latency,MQTT_IMU)
 
+    finish_time = rospy.Time.now().to_sec()
+    calcProcessingTime(start_time, finish_time, "scan")
+
 # Helper functions
 def sendLatencyData(source,latency):
         latency_data = {
@@ -201,7 +227,6 @@ def sendLatencyData(source,latency):
             rospy.logerr("Error publishing latency for %s: %s", source, e)
             error_counters[source] += 1
     
-
 def sendBandwidth(source, payload):
 
     payload_bytes = payload.encode('utf-8')  # Ensure it's in bytes (UTF-8 is standard for JSON)
@@ -220,6 +245,11 @@ def sendBandwidth(source, payload):
         rospy.logerr("Error publishing bandwidth for %s: %s", source, e)
         error_counters[source] += 1
 
+def calcProcessingTime(startTime, endTime, source):
+    processing_time = endTime - startTime
+    processing_records[source].append(processing_time)
+
+
 def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
@@ -231,11 +261,8 @@ def helper(source,payload,latency,msg):
         error_counters[source] += 1
 
 def log_throughput(event):
-    global throughput_counters, latency_records, error_counters, bandwidth_counters
-    # Calculate the interval (in seconds) over which metrics are collected
+    global throughput_counters, latency_records, error_counters, processing_records
     interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
-    
-    # Calculate throughput for each topic
     battery_throughput = throughput_counters["battery"] / interval
     odom_throughput = throughput_counters["odom"] / interval
     scan_throughput = throughput_counters["scan"] / interval
@@ -248,7 +275,7 @@ def log_throughput(event):
         "imu_msg_per_sec": imu_throughput,
     }
 
-    # Calculate latency statistics (mean, standard deviation, jitter) for each topic
+    # Calculate latency stats for each topic
     latency_stats = {}
     for topic in latency_records:
         if latency_records[topic]:
@@ -262,9 +289,21 @@ def log_throughput(event):
         latency_stats[topic + "_jitter"] = jitter
         latency_records[topic].clear()  # Reset for next interval
 
-    # (Bandwidth data is already being published per message in sendBandwidth,
-    #  so we might not need to recompute it here unless you aggregate it.)
+    # Calculate processing overhead stats for each topic
+    processing_stats = {}
+    for topic in processing_records:
+        if processing_records[topic]:
+            mean_processing = statistics.mean(processing_records[topic])
+            stdev_processing = statistics.stdev(processing_records[topic]) if len(processing_records[topic]) > 1 else 0.0
+            processing_jitter = max(processing_records[topic]) - min(processing_records[topic])
+        else:
+            mean_processing = stdev_processing = processing_jitter = 0.0
+        processing_stats[topic + "_processing_mean"] = mean_processing
+        processing_stats[topic + "_processing_stdev"] = stdev_processing
+        processing_stats[topic + "_processing_jitter"] = processing_jitter
+        processing_records[topic].clear()
 
+    # (Bandwidth is being reported per message in sendBandwidth)
     # Calculate error percentages for each topic
     error_percentages = {}
     for topic in error_counters:
@@ -274,16 +313,16 @@ def log_throughput(event):
         else:
             error_percentages[topic + "_error_pct"] = 0.0
 
-    # Combine all metrics into a single dictionary
     metrics = {
         "throughput": throughput_data,
         "latency": latency_stats,
-        "errors": error_percentages
+        "processing": processing_stats,
+        "errors": error_percentages,
     }
     rospy.loginfo("Metrics: %s", metrics)
     mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(metrics))
     
-    # Reset throughput and error counters for the next interval
+    # Reset counters for next interval
     throughput_counters["battery"] = 0
     throughput_counters["odom"] = 0
     throughput_counters["scan"] = 0
@@ -292,6 +331,7 @@ def log_throughput(event):
     error_counters["battery"] = 0
     error_counters["odom"] = 0
     error_counters["scan"] = 0
+    error_counters["imu"] = 0
     error_counters["imu"] = 0
 
 
