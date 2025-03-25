@@ -57,11 +57,7 @@ def battery_callback(batt_msg):
         "present": batt_msg.present
     }
     payload = json.dumps(data)
-    
-    sendBandwidth("battery",payload)
-    sendLatencyData("scan",latency)
-
-    mqtt_client.publish(MQTT_BATTERY, payload)
+    helper("battery",payload,latency,MQTT_BATTERY)
 
 # Callback for Odometry messages
 def odom_callback(odom_msg):
@@ -96,12 +92,9 @@ def odom_callback(odom_msg):
         "linear_velocity": odom_msg.twist.twist.linear.x,
         "angular_velocity": odom_msg.twist.twist.angular.z
     }
+
     payload = json.dumps(data)
-
-    sendBandwidth("odom",payload)
-    sendLatencyData("scan",latency)
-
-    mqtt_client.publish(MQTT_ODOM, payload)
+    helper("odom",payload,latency,MQTT_ODOM)
 
 # Callback for LaserScan messages
 def scan_callback(scan_msg):
@@ -128,11 +121,7 @@ def scan_callback(scan_msg):
         "ranges": list(scan_msg.ranges)
     }
     payload = json.dumps(data)
-
-    sendBandwidth("scan",payload)
-    sendLatencyData("scan",latency)
-
-    mqtt_client.publish(MQTT_SCAN, payload)
+    helper("scan",payload,latency,MQTT_SCAN)
 
 # Callback for IMU messages
 def imu_callback(imu_msg):
@@ -171,11 +160,7 @@ def imu_callback(imu_msg):
         }
     }
     payload = json.dumps(data)
-
-    sendBandwidth("imu",payload)
-    sendLatencyData("imu",latency)
-    
-    mqtt_client.publish(MQTT_IMU, payload)
+    helper("imu",payload,latency,MQTT_IMU)
 
 def sendLatencyData(source,latency):
         latency_data = {
@@ -196,6 +181,13 @@ def sendBandwidth(source, payload):
     }
 
     mqtt_client.publish(MQTT_DATA, str(bandwidth_data))
+
+def helper(source,payload,latency,msg):
+    
+    sendBandwidth(source,payload)
+    sendLatencyData(source,latency)
+    mqtt_client.publish(msg, payload)
+
 
 
 # Timer callback to log and reset throughput counters
