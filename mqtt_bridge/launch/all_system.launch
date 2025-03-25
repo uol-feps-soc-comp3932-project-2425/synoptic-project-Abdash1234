@@ -1,0 +1,20 @@
+<launch>
+  <!-- Launch the Dummy Publisher Node -->
+  <node pkg="dummy_publisher" type="dummy_publisher.py" name="dummy_publisher_node" output="screen" />
+
+  <!-- Launch the MQTT Bridge Node -->
+  <node pkg="mqtt_bridge" type="mqtt_bridge.py" name="mqtt_bridge_node" output="screen" />
+
+  <!-- Optionally, launch RViz for visualization -->
+  <node pkg="rviz" type="rviz" name="rviz" output="screen" />
+
+  <!--
+  Future nodes:
+  When your actual e-puck2 is available, you can add or replace nodes here.
+  For example, you might replace the dummy publisher with the actual epuck driver:
+  <node pkg="epuck_driver_cpp" type="epuck2_controller.launch" name="epuck_driver_node" output="screen">
+    <param name="epuck2_address" value="192.168.x.x" />
+  </node>
+  -->
+</launch>
+
