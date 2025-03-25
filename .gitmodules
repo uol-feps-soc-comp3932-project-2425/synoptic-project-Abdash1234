@@ -1,0 +1,6 @@
+[submodule "epuck_driver_cpp"]
+	path = epuck_driver_cpp
+	url = https://github.com/gctronic/epuck_driver_cpp.git
+[submodule "geometry2"]
+	path = geometry2
+	url = git@github.com:ros/geometry2.git
