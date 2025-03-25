@@ -13,6 +13,16 @@ MQTT_ODOM    = "robot/odom"
 MQTT_SCAN    = "robot/scan"
 MQTT_IMU     = "robot/imu"
 MQTT_LATENCY = "robot/latency"
+MQTT_THROUGHPUT = "robot/throughput"
+MQTT_DATA = "robot/data"
+
+# Global throughput counters (messages counted per topic)
+throughput_counters = {
+    "battery": 0,
+    "odom": 0,
+    "scan": 0,
+    "imu": 0,
+}
 
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
@@ -25,6 +35,10 @@ mqtt_client.on_message = on_mqtt_message
 
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
+    
+    global throughput_counters
+    throughput_counters["battery"] += 1
+
     current_time = rospy.Time.now().to_sec()
     original_stamp = batt_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
@@ -43,12 +57,18 @@ def battery_callback(batt_msg):
         "present": batt_msg.present
     }
     payload = json.dumps(data)
-    returnedLatency = getLatencyData("battery",latency)
-    mqtt_client.publish(MQTT_LATENCY, str(returnedLatency))
+    
+    sendBandwidth("battery",payload)
+    sendLatencyData("scan",latency)
+
     mqtt_client.publish(MQTT_BATTERY, payload)
 
 # Callback for Odometry messages
 def odom_callback(odom_msg):
+        
+    global throughput_counters
+    throughput_counters["odom"] += 1
+
     current_time = rospy.Time.now().to_sec()
     original_stamp = odom_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
@@ -77,12 +97,18 @@ def odom_callback(odom_msg):
         "angular_velocity": odom_msg.twist.twist.angular.z
     }
     payload = json.dumps(data)
-    returnedLatency = getLatencyData("odom",latency)
-    mqtt_client.publish(MQTT_LATENCY, str(returnedLatency))
+
+    sendBandwidth("odom",payload)
+    sendLatencyData("scan",latency)
+
     mqtt_client.publish(MQTT_ODOM, payload)
 
 # Callback for LaserScan messages
 def scan_callback(scan_msg):
+        
+    global throughput_counters
+    throughput_counters["scan"] += 1
+
     current_time = rospy.Time.now().to_sec()
     original_stamp = scan_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
@@ -103,12 +129,17 @@ def scan_callback(scan_msg):
     }
     payload = json.dumps(data)
 
-    returnedLatency = getLatencyData("scan",latency)
-    mqtt_client.publish(MQTT_LATENCY, str(returnedLatency))
+    sendBandwidth("scan",payload)
+    sendLatencyData("scan",latency)
+
     mqtt_client.publish(MQTT_SCAN, payload)
 
 # Callback for IMU messages
 def imu_callback(imu_msg):
+        
+    global throughput_counters
+    throughput_counters["imu"] += 1
+
     current_time = rospy.Time.now().to_sec()
     original_stamp = imu_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
@@ -140,17 +171,57 @@ def imu_callback(imu_msg):
         }
     }
     payload = json.dumps(data)
+
+    sendBandwidth("imu",payload)
+    sendLatencyData("imu",latency)
     
-    returnedLatency = getLatencyData("imu",latency)
-    mqtt_client.publish(MQTT_LATENCY, str(returnedLatency))
     mqtt_client.publish(MQTT_IMU, payload)
 
-def getLatencyData(source,latency):
+def sendLatencyData(source,latency):
         latency_data = {
         "source": source,
         "latency": latency
     }
-        return latency_data
+        
+        mqtt_client.publish(MQTT_LATENCY, str(latency_data))
+
+def sendBandwidth(source, payload):
+
+    payload_bytes = payload.encode('utf-8')  # Ensure it's in bytes (UTF-8 is standard for JSON)
+    payload_size = len(payload_bytes)
+
+    bandwidth_data ={
+        "source": source,
+        "payload_size": payload_size
+    }
+
+    mqtt_client.publish(MQTT_DATA, str(bandwidth_data))
+
+
+# Timer callback to log and reset throughput counters
+def log_throughput(event):
+    global throughput_counters
+    interval = event.current_real.to_sec() - event.last_real.to_sec() if event.last_real else 1.0
+    battery_throughput = throughput_counters["battery"] / interval
+    odom_throughput = throughput_counters["odom"] / interval
+    scan_throughput = throughput_counters["scan"] / interval
+    imu_throughput = throughput_counters["imu"] / interval
+
+    throughput_data = {
+        "battery": battery_throughput,
+        "odom": odom_throughput,
+        "scan": scan_throughput,
+        "imu": imu_throughput
+    }
+    rospy.loginfo("Throughput (msg/sec): %s", throughput_data)
+    # Optionally publish throughput metrics to MQTT
+    mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(throughput_data))
+    
+    # Reset counters
+    throughput_counters["battery"] = 0
+    throughput_counters["odom"] = 0
+    throughput_counters["scan"] = 0
+    throughput_counters["imu"] = 0
 
 
 def mqtt_bridge_node():
@@ -160,6 +231,8 @@ def mqtt_bridge_node():
     rospy.Subscriber("/odom", Odometry, odom_callback)
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
+
+    rospy.Timer(rospy.Duration(5.0), log_throughput)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
