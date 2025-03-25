@@ -33,6 +33,22 @@ latency_records = {
     "imu": []
 }
 
+# Global error counters for each topic
+error_counters = {
+    "battery": 0,
+    "odom": 0,
+    "scan": 0,
+    "imu": 0,
+}
+
+# Global bandwidth counters (total bytes transmitted per topic)
+bandwidth_counters = {
+    "battery": 0,
+    "odom": 0,
+    "scan": 0,
+    "imu": 0,
+}
+
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
@@ -141,7 +157,7 @@ def imu_callback(imu_msg):
     current_time = rospy.Time.now().to_sec()
     original_stamp = imu_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("IMU Message latency: %.3f seconds", latency)
+    # rospy.loginfo("IMU Message latency: %.3f seconds", latency)
     latency_records["imu"].append(latency)
 
     
@@ -179,29 +195,47 @@ def sendLatencyData(source,latency):
         "source": source,
         "latency": latency
     }
-        mqtt_client.publish(MQTT_LATENCY, str(latency_data))
+        try:
+            mqtt_client.publish(MQTT_LATENCY, json.dumps(latency_data))
+        except Exception as e:
+            rospy.logerr("Error publishing latency for %s: %s", source, e)
+            error_counters[source] += 1
+    
 
 def sendBandwidth(source, payload):
 
     payload_bytes = payload.encode('utf-8')  # Ensure it's in bytes (UTF-8 is standard for JSON)
     payload_size = len(payload_bytes)
 
+    bandwidth_counters[source] += payload_size
+
     bandwidth_data ={
         "source": source,
         "payload_size": payload_size
     }
 
-    mqtt_client.publish(MQTT_DATA, str(bandwidth_data))
+    try:
+        mqtt_client.publish(MQTT_DATA, json.dumps(bandwidth_data))
+    except Exception as e:
+        rospy.logerr("Error publishing bandwidth for %s: %s", source, e)
+        error_counters[source] += 1
 
 def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
     sendLatencyData(source,latency)
-    mqtt_client.publish(msg, payload)
+    try:
+        mqtt_client.publish(msg, payload)
+    except Exception as e:
+        rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
+        error_counters[source] += 1
 
 def log_throughput(event):
-    global throughput_counters, latency_records
+    global throughput_counters, latency_records, error_counters, bandwidth_counters
+    # Calculate the interval (in seconds) over which metrics are collected
     interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
+    
+    # Calculate throughput for each topic
     battery_throughput = throughput_counters["battery"] / interval
     odom_throughput = throughput_counters["odom"] / interval
     scan_throughput = throughput_counters["scan"] / interval
@@ -213,9 +247,9 @@ def log_throughput(event):
         "scan_msg_per_sec": scan_throughput,
         "imu_msg_per_sec": imu_throughput,
     }
-    
-    # Now calculate latency stats (mean, stdev, jitter) for each topic
-    jitter_data = {}
+
+    # Calculate latency statistics (mean, standard deviation, jitter) for each topic
+    latency_stats = {}
     for topic in latency_records:
         if latency_records[topic]:
             mean_latency = statistics.mean(latency_records[topic])
@@ -223,23 +257,43 @@ def log_throughput(event):
             jitter = max(latency_records[topic]) - min(latency_records[topic])
         else:
             mean_latency = stdev_latency = jitter = 0.0
-        jitter_data[topic + "_latency_mean"] = mean_latency
-        jitter_data[topic + "_latency_stdev"] = stdev_latency
-        jitter_data[topic + "_jitter"] = jitter
-        latency_records[topic].clear()  # Reset for the next interval
+        latency_stats[topic + "_latency_mean"] = mean_latency
+        latency_stats[topic + "_latency_stdev"] = stdev_latency
+        latency_stats[topic + "_jitter"] = jitter
+        latency_records[topic].clear()  # Reset for next interval
 
+    # (Bandwidth data is already being published per message in sendBandwidth,
+    #  so we might not need to recompute it here unless you aggregate it.)
+
+    # Calculate error percentages for each topic
+    error_percentages = {}
+    for topic in error_counters:
+        total_attempts = throughput_counters[topic] + error_counters[topic]
+        if total_attempts > 0:
+            error_percentages[topic + "_error_pct"] = (error_counters[topic] / total_attempts) * 100
+        else:
+            error_percentages[topic + "_error_pct"] = 0.0
+
+    # Combine all metrics into a single dictionary
     metrics = {
         "throughput": throughput_data,
-        "latency": jitter_data
+        "latency": latency_stats,
+        "errors": error_percentages
     }
     rospy.loginfo("Metrics: %s", metrics)
     mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(metrics))
     
-    # Reset throughput counters
+    # Reset throughput and error counters for the next interval
     throughput_counters["battery"] = 0
     throughput_counters["odom"] = 0
     throughput_counters["scan"] = 0
     throughput_counters["imu"] = 0
+
+    error_counters["battery"] = 0
+    error_counters["odom"] = 0
+    error_counters["scan"] = 0
+    error_counters["imu"] = 0
+
 
 
 def mqtt_bridge_node():
