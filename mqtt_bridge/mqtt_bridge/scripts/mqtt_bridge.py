@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-import json
-import rospy
+import json, rospy
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
@@ -16,6 +15,9 @@ MQTT_IMU     = "robot/imu"
 MQTT_LATENCY = "robot/latency"
 MQTT_THROUGHPUT = "robot/throughput"
 MQTT_DATA = "robot/data"
+
+log_count = 0
+
 
 # Global throughput counters (messages counted per topic)
 throughput_counters = {
@@ -68,7 +70,6 @@ mqtt_client.on_message = on_mqtt_message
 
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
-    
     start_time = rospy.Time.now().to_sec()
     global throughput_counters
     throughput_counters["battery"] += 1
@@ -213,7 +214,7 @@ def imu_callback(imu_msg):
     helper("imu",payload,latency,MQTT_IMU)
 
     finish_time = rospy.Time.now().to_sec()
-    calcProcessingTime(start_time, finish_time, "scan")
+    calcProcessingTime(start_time, finish_time, "imu")
 
 # Helper functions
 def sendLatencyData(source,latency):
@@ -249,7 +250,6 @@ def calcProcessingTime(startTime, endTime, source):
     processing_time = endTime - startTime
     processing_records[source].append(processing_time)
 
-
 def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
@@ -260,7 +260,14 @@ def helper(source,payload,latency,msg):
         rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
         error_counters[source] += 1
 
-def log_throughput(event):
+def write_metrics_to_file(metrics):
+    with open("/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/mqtt_bridge/mqtt_bridge/scripts/metrics.txt", "a") as f:
+        # Convert the metrics dictionary to a formatted JSON string
+        metrics_str = json.dumps(metrics, indent=2)
+        # Write the metrics with a newline separator
+        f.write(metrics_str + "\n")
+
+def log_metrics(event):
     global throughput_counters, latency_records, error_counters, processing_records
     interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
     battery_throughput = throughput_counters["battery"] / interval
@@ -292,16 +299,19 @@ def log_throughput(event):
     # Calculate processing overhead stats for each topic
     processing_stats = {}
     for topic in processing_records:
-        if processing_records[topic]:
-            mean_processing = statistics.mean(processing_records[topic])
-            stdev_processing = statistics.stdev(processing_records[topic]) if len(processing_records[topic]) > 1 else 0.0
-            processing_jitter = max(processing_records[topic]) - min(processing_records[topic])
+        # Make a local copy of the data to avoid concurrent modifications
+        local_data = list(processing_records[topic])
+        if local_data:
+            mean_processing = statistics.mean(local_data)
+            stdev_processing = statistics.stdev(local_data) if len(local_data) > 1 else 0.0
+            processing_jitter = max(local_data) - min(local_data)
         else:
             mean_processing = stdev_processing = processing_jitter = 0.0
         processing_stats[topic + "_processing_mean"] = mean_processing
         processing_stats[topic + "_processing_stdev"] = stdev_processing
         processing_stats[topic + "_processing_jitter"] = processing_jitter
-        processing_records[topic].clear()
+        processing_records[topic].clear()  # Clear the original list for the next interval
+
 
     # (Bandwidth is being reported per message in sendBandwidth)
     # Calculate error percentages for each topic
@@ -321,6 +331,7 @@ def log_throughput(event):
     }
     rospy.loginfo("Metrics: %s", metrics)
     mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(metrics))
+    write_metrics_to_file(metrics)
     
     # Reset counters for next interval
     throughput_counters["battery"] = 0
@@ -332,9 +343,6 @@ def log_throughput(event):
     error_counters["odom"] = 0
     error_counters["scan"] = 0
     error_counters["imu"] = 0
-    error_counters["imu"] = 0
-
-
 
 def mqtt_bridge_node():
     rospy.init_node('mqtt_bridge', anonymous=True)
@@ -344,7 +352,7 @@ def mqtt_bridge_node():
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
 
-    rospy.Timer(rospy.Duration(5.0), log_throughput)
+    rospy.Timer(rospy.Duration(5.0), log_metrics)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
