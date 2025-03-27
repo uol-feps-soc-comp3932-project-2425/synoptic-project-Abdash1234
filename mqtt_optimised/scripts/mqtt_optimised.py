@@ -32,6 +32,14 @@ throughput_counters = {
     "imu": 0,
 }
 
+# Global Aggregation Buffers (for storing messages before sending)
+aggregation_buffers = {
+    "battery": [],
+    "odom": [],
+    "scan": [],
+    "imu": []
+}
+
 # Global latency records (latency recorded per topic)
 latency_records = {
     "battery": [],
@@ -238,8 +246,8 @@ def getBatteryLevel():
 def getCurrentAverageLatency():
     return overall_mean_latency
 
-def getBandwidth():
-    return bandwidth_counters
+# def getBandwidth():
+#     return bandwidth_counters
 
 def ErrorRate():    
     return overall_error_rate
@@ -310,11 +318,30 @@ def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
     sendLatencyData(source,latency)
-    try:
-        mqttPublish(msg, payload, source)
-    except Exception as e:
-        rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
-        error_counters[source] += 1
+
+    aggregation_buffers[source].append(payload)
+    # try:
+    #     mqttPublish(msg, payload, source)
+    # except Exception as e:
+    #     rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
+    #     error_counters[source] += 1
+
+def publish_aggregated(event):
+    aggregated_data = {}
+    total_msgs = 0
+    for topic, messages in aggregation_buffers.items():
+        if messages:
+            aggregated_data[topic] = messages[:]  # Copy entire list
+            total_msgs += len(messages)
+            aggregation_buffers[topic] = []  # Clear after sending
+    if aggregated_data:
+        payload = cbor2.dumps(aggregated_data)
+        mqttPublish("robot/aggregated_data", payload)
+        aggregated_payload_size = len(payload)
+        # rospy.loginfo("Aggregated data published: %s", aggregated_data)
+        rospy.loginfo("Aggregated message contains %d messages, payload size: %d bytes", total_msgs, aggregated_payload_size)
+
+
 
 def write_metrics_to_file(metrics):
     with open("/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/mqtt_optimised/scripts/metrics.txt", "a") as f:
@@ -446,6 +473,7 @@ def mqtt_bridge_node():
     rospy.Subscriber("/imu", Imu, imu_callback)
 
     rospy.Timer(rospy.Duration(5.0), log_metrics)
+    rospy.Timer(rospy.Duration(6.0), publish_aggregated)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
