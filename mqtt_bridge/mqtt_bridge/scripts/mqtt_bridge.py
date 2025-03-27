@@ -16,7 +16,11 @@ MQTT_LATENCY = "robot/latency"
 MQTT_THROUGHPUT = "robot/throughput"
 MQTT_DATA = "robot/data"
 
-log_count = 0
+latest_battery_percentage = None
+overall_mean_latency = None
+overall_processing_stdev = None
+overall_error_rate = None
+overall_bandwidth_usage = None
 
 
 # Global throughput counters (messages counted per topic)
@@ -71,13 +75,15 @@ mqtt_client.on_message = on_mqtt_message
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
     start_time = rospy.Time.now().to_sec()
-    global throughput_counters
+    global throughput_counters, latest_battery_percentage
     throughput_counters["battery"] += 1
 
     current_time = rospy.Time.now().to_sec()
     original_stamp = batt_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
     latency_records["battery"].append(latency)
+
+    latest_battery_percentage = batt_msg.percentage
 
     data = {
         "header": {
@@ -216,6 +222,24 @@ def imu_callback(imu_msg):
     finish_time = rospy.Time.now().to_sec()
     calcProcessingTime(start_time, finish_time, "imu")
 
+
+def getBatteryLevel():
+    global latest_battery_percentage
+    if latest_battery_percentage != None:
+        return latest_battery_percentage
+    else:
+        rospy.logwarn("Battery level not available")
+        return -1
+    
+def getCurrentAverageLatency():
+    return overall_mean_latency
+
+def getBandwidth():
+    return bandwidth_counters
+
+def ErrorRate():    
+    return overall_error_rate
+
 # Helper functions
 def sendLatencyData(source,latency):
         latency_data = {
@@ -268,7 +292,7 @@ def write_metrics_to_file(metrics):
         f.write(metrics_str + "\n")
 
 def log_metrics(event):
-    global throughput_counters, latency_records, error_counters, processing_records
+    global throughput_counters, latency_records, error_counters, processing_records,overall_mean_latency, overall_processing_stdev, overall_error_rate, overall_bandwidth_usage
     interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
     battery_throughput = throughput_counters["battery"] / interval
     odom_throughput = throughput_counters["odom"] / interval
@@ -284,7 +308,9 @@ def log_metrics(event):
 
     # Calculate latency stats for each topic
     latency_stats = {}
+    all_latencies = []
     for topic in latency_records:
+        all_latencies.extend(latency_records[topic])
         if latency_records[topic]:
             mean_latency = statistics.mean(latency_records[topic])
             stdev_latency = statistics.stdev(latency_records[topic]) if len(latency_records[topic]) > 1 else 0.0
@@ -296,32 +322,60 @@ def log_metrics(event):
         latency_stats[topic + "_jitter"] = jitter
         latency_records[topic].clear()  # Reset for next interval
 
+    if all_latencies:
+        overall_mean_latency = statistics.mean(all_latencies)
+    else:
+        overall_mean_latency = 0.0
+
     # Calculate processing overhead stats for each topic
     processing_stats = {}
+    all_processing = []
     for topic in processing_records:
         # Make a local copy of the data to avoid concurrent modifications
         local_data = list(processing_records[topic])
+        # Aggregate all processing times across topics
+        all_processing.extend(local_data)
+        
         if local_data:
             mean_processing = statistics.mean(local_data)
             stdev_processing = statistics.stdev(local_data) if len(local_data) > 1 else 0.0
+            # Here, jitter is defined as the range.
             processing_jitter = max(local_data) - min(local_data)
         else:
             mean_processing = stdev_processing = processing_jitter = 0.0
+            
         processing_stats[topic + "_processing_mean"] = mean_processing
         processing_stats[topic + "_processing_stdev"] = stdev_processing
         processing_stats[topic + "_processing_jitter"] = processing_jitter
+        
         processing_records[topic].clear()  # Clear the original list for the next interval
 
+    # Compute overall standard deviation for all processing times (as a measure of overall jitter)
+    if len(all_processing) > 1:
+        overall_processing_stdev = statistics.stdev(all_processing)
+    else:
+        overall_processing_stdev = 0.0
 
     # (Bandwidth is being reported per message in sendBandwidth)
     # Calculate error percentages for each topic
     error_percentages = {}
+    overall_errors = 0
+    overall_attempts = 0
     for topic in error_counters:
-        total_attempts = throughput_counters[topic] + error_counters[topic]
-        if total_attempts > 0:
-            error_percentages[topic + "_error_pct"] = (error_counters[topic] / total_attempts) * 100
+        topic_attempts = throughput_counters[topic] + error_counters[topic]
+        if topic_attempts > 0:
+            error_percentages[topic + "_error_pct"] = (error_counters[topic] / topic_attempts) * 100
         else:
             error_percentages[topic + "_error_pct"] = 0.0
+        overall_errors += error_counters[topic]
+        overall_attempts += topic_attempts
+
+    overall_error_rate = (overall_errors / overall_attempts) * 100 if overall_attempts > 0 else 0.0
+
+    # Calculate bandwidth usage per topic and overall (in bytes per second)
+    overall_bytes = sum(bandwidth_counters.values())
+    overall_bandwidth_usage = overall_bytes / interval  
+
 
     metrics = {
         "throughput": throughput_data,
@@ -329,7 +383,14 @@ def log_metrics(event):
         "processing": processing_stats,
         "errors": error_percentages,
     }
+
+    rospy.loginfo("Average Latency: %.3f ms", overall_mean_latency*1000)
+    rospy.loginfo("Current Battery Levels : %.3f", getBatteryLevel()*100)
+    rospy.loginfo("Overall Processing Jitter (stdev): %fms", overall_processing_stdev)
+    rospy.loginfo("Overall Bandwidth Usage: %f bytes/s", (overall_bandwidth_usage/5))
+    rospy.loginfo("Overall Error Rate: %.3f%%", overall_error_rate)
     rospy.loginfo("Metrics: %s", metrics)
+    # mqttPublish(MQTT_THROUGHPUT, json.dumps(metrics))
     mqtt_client.publish(MQTT_THROUGHPUT, json.dumps(metrics))
     write_metrics_to_file(metrics)
     
@@ -343,6 +404,8 @@ def log_metrics(event):
     error_counters["odom"] = 0
     error_counters["scan"] = 0
     error_counters["imu"] = 0
+
+
 
 def mqtt_bridge_node():
     rospy.init_node('mqtt_bridge', anonymous=True)
