@@ -405,6 +405,25 @@ def log_metrics(event):
     error_counters["scan"] = 0
     error_counters["imu"] = 0
 
+def log_battery_metrics(event):
+    global throughput_counters, bandwidth_counters, overall_bandwidth_usage
+
+    # Determine the interval (in seconds)
+    interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
+
+    # Get the number of battery messages sent in this interval
+    battery_messages = throughput_counters["battery"]
+
+    # Sum up the total bytes transmitted for battery in this interval
+    battery_bytes = bandwidth_counters["battery"]
+    overall_bandwidth_usage = battery_bytes / interval  # bytes per second
+
+    rospy.loginfo("Battery message published on 'robot/battery' payload size is %d bytes", battery_bytes)
+    
+    # Reset the battery counters for the next interval
+    throughput_counters["battery"] = 0
+    bandwidth_counters["battery"] = 0
+
 
 
 def mqtt_bridge_node():
@@ -416,6 +435,7 @@ def mqtt_bridge_node():
     rospy.Subscriber("/imu", Imu, imu_callback)
 
     rospy.Timer(rospy.Duration(5.0), log_metrics)
+    rospy.Timer(rospy.Duration(6.0), log_battery_metrics)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()

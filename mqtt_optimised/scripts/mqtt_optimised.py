@@ -33,12 +33,7 @@ throughput_counters = {
 }
 
 # Global Aggregation Buffers (for storing messages before sending)
-aggregation_buffers = {
-    "battery": [],
-    "odom": [],
-    "scan": [],
-    "imu": []
-}
+battery_buffer = []
 
 # Global latency records (latency recorded per topic)
 latency_records = {
@@ -108,7 +103,8 @@ def battery_callback(batt_msg):
     }
     # payload = json.dumps(data)
     payload = cbor2.dumps(data)
-    helper("battery",payload,latency,MQTT_BATTERY)
+    battery_buffer.append(payload)
+    # helper("battery",payload,latency,MQTT_BATTERY)
     finish_time = rospy.Time.now().to_sec()
     calcProcessingTime(start_time, finish_time, "battery")
 
@@ -249,26 +245,79 @@ def getCurrentAverageLatency():
 # def getBandwidth():
 #     return bandwidth_counters
 
-def ErrorRate():    
-    return overall_error_rate
+# def ErrorRate():    
+#     return overall_error_rate
 
-# Function to set QoS level
-def setDynamicQoS(source):
-    if source == "battery":
-        return 0
-    elif source == "odom":
-        return 0
-    elif source == "scan":
-        return 0
-    elif source == "imu":
-        return 0
+
+def normaliseLatency(latency, minLatency = 0.001, maxLatency = 0.1):
+    # Normalise the latency value to a range of 0 to 1
+    if latency < minLatency:
+        return 0.0
+    elif latency > maxLatency:
+        return 1.0
     else:
-        return 0
+        return (latency - minLatency) / (maxLatency - minLatency)
 
-# Function to publish message
+def normaliseBandwidth(low_bw = 1000, high_bw = 100000):
+    if overall_bandwidth_usage <= low_bw:
+        return 0.0
+    elif overall_bandwidth_usage >= high_bw:
+        return 1.0
+    else:
+        return (overall_bandwidth_usage - low_bw) / (high_bw - low_bw)
+    
+def normaliseJitter(minJitter = 0, maxJitter = 0.005):
+    if overall_processing_stdev < minJitter:
+        return 0.0
+    elif overall_processing_stdev > maxJitter:
+        return 1.0
+    else:
+        return (overall_processing_stdev - minJitter) / (maxJitter - minJitter)
+
+def calcScore(batteryLevel, latency, bandwidth, jitter, errorRate):
+    # Normalise the values
+    calcBatteryValue = 1.0 - (batteryLevel)
+    calcLatency = normaliseLatency(latency)
+    calcErrorRate = errorRate / 100.0
+    calcBandwidth = normaliseBandwidth(bandwidth)
+    calcjitter = normaliseJitter(jitter)
+
+    # Set Weights
+    w_battery = 0.3
+    w_latency = 0.35
+    w_error   = 0.2
+    w_bw      = 0.1
+    w_jitter  = 0.05
+
+    # Compute the weighted sum score
+    score = (w_battery * calcBatteryValue +
+             w_latency * calcLatency +
+             w_error   * calcErrorRate +
+             w_bw      * calcBandwidth +
+             w_jitter  * calcjitter)
+
+    return score
+
+
+def setQoS():
+    # Get current metrics (make sure these globals are updated from your log_metrics routine)
+    global overall_mean_latency, overall_error_rate, overall_bandwidth_usage, overall_processing_stdev, overall_error_rate
+    battery_percentage = getBatteryLevel()  # convert fraction to percentage
+
+    score = calcScore(battery_percentage, overall_mean_latency, overall_bandwidth_usage, overall_processing_stdev, overall_error_rate)
+    # Set
+    if score < 0.3:
+        return 0
+    elif score < 0.6:
+        return 1
+    else:
+        return 2
+
+
 def mqttPublish(destination, msg, source=False):
+    qosValue = setQoS()
     try:
-        mqtt_client.publish(destination, msg)
+        mqtt_client.publish(destination, msg, qos=qosValue)
     except Exception as e:
         rospy.logerr("Error publishing to topic %s: %s", destination, e)
         if source and source in error_counters:
@@ -318,30 +367,30 @@ def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
     sendLatencyData(source,latency)
+    try:
+        mqttPublish(msg, payload, source)
+    except Exception as e:
+        rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
+        error_counters[source] += 1
 
-    aggregation_buffers[source].append(payload)
-    # try:
-    #     mqttPublish(msg, payload, source)
-    # except Exception as e:
-    #     rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
-    #     error_counters[source] += 1
+def publish_aggregated_buffer(buffer, topic):
+    total_msgs = len(buffer)
+    if total_msgs == 0:
+        rospy.loginfo("No messages to aggregate for topic '%s'", topic)
+        return
 
-def publish_aggregated(event):
-    aggregated_data = {}
-    total_msgs = 0
-    for topic, messages in aggregation_buffers.items():
-        if messages:
-            aggregated_data[topic] = messages[:]  # Copy entire list
-            total_msgs += len(messages)
-            aggregation_buffers[topic] = []  # Clear after sending
-    if aggregated_data:
-        payload = cbor2.dumps(aggregated_data)
-        mqttPublish("robot/aggregated_data", payload)
-        aggregated_payload_size = len(payload)
-        # rospy.loginfo("Aggregated data published: %s", aggregated_data)
-        rospy.loginfo("Aggregated message contains %d messages, payload size: %d bytes", total_msgs, aggregated_payload_size)
+    # Convert the list of messages (which are already CBOR-encoded bytes) into a single aggregated payload.
+    aggregated_payload = cbor2.dumps(buffer)
+    aggregated_payload_size = len(aggregated_payload)
 
+    # Publish the aggregated payload on the given MQTT topic.
+    mqttPublish(topic, aggregated_payload)
 
+    # Log the details.
+    rospy.loginfo("Aggregated message published on '%s' payload size is %d bytes", topic, aggregated_payload_size)
+
+    # Clear the buffer for the next interval.
+    buffer.clear()
 
 def write_metrics_to_file(metrics):
     with open("/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/mqtt_optimised/scripts/metrics.txt", "a") as f:
@@ -446,7 +495,7 @@ def log_metrics(event):
     rospy.loginfo("Average Latency: %.3f ms", overall_mean_latency*1000)
     rospy.loginfo("Current Battery Levels : %.3f", getBatteryLevel()*100)
     rospy.loginfo("Overall Processing Jitter (stdev): %fms", overall_processing_stdev)
-    rospy.loginfo("Overall Bandwidth Usage: %f bytes/s", (overall_bandwidth_usage/5))
+    rospy.loginfo("Overall Bandwidth Usage: %.3f bytes/s", (overall_bandwidth_usage/5))
     rospy.loginfo("Overall Error Rate: %.3f%%", overall_error_rate)
     rospy.loginfo("Metrics: %s", metrics)
     # mqttPublish(MQTT_THROUGHPUT, json.dumps(metrics))
@@ -472,8 +521,9 @@ def mqtt_bridge_node():
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
 
+    rospy.Timer(rospy.Duration(4), lambda event: publish_aggregated_buffer(battery_buffer, MQTT_BATTERY))
     rospy.Timer(rospy.Duration(5.0), log_metrics)
-    rospy.Timer(rospy.Duration(6.0), publish_aggregated)
+    
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
