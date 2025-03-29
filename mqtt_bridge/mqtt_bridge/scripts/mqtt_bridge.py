@@ -67,10 +67,91 @@ processing_records = {
 def on_mqtt_message(client, userdata, msg):
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
 
+# Global dictionary to store publish timestamps
+publish_timestamps = {}
+mqtt_publish_latencies = []  # To store latencies for statistics
+mqtt_errors = 0
+mqtt_total_bytes = 0
+mqtt_overall_bytes = 0
+
+def on_publish(client, userdata, mid):
+    global publish_timestamps, mqtt_publish_latencies
+    if mid in publish_timestamps:
+        publish_time = publish_timestamps.pop(mid)
+        ack_time = rospy.Time.now().to_sec()
+        latency = ack_time - publish_time
+        mqtt_publish_latencies.append(latency)
+        # rospy.loginfo("MQTT publish round-trip latency for mid %s: %.3f seconds", mid, latency)    
+
+def calc_mqtt_latency():
+    global mqqt_publish_latencies
+    if mqtt_publish_latencies:
+        avg_latency = sum(mqtt_publish_latencies) / len(mqtt_publish_latencies)
+        jitter = statistics.stdev(mqtt_publish_latencies) if len(mqtt_publish_latencies) > 1 else 0.0
+        # rospy.loginfo("MQTT Metrics: Avg Latency: %.3f ms, Count: %d",avg_latency*1000, len(mqtt_publish_latencies))
+        return avg_latency, jitter, len(mqtt_publish_latencies)
+    return 0, 0, 0
+
+def calc_mqtt_bandwidth():
+    global mqtt_total_bytes, mqtt_overall_bytes
+    bandwidth_usage = mqtt_total_bytes
+    totalBytes = mqtt_total_bytes + mqtt_overall_bytes
+    return bandwidth_usage, totalBytes
+
+def calc_mqtt_error_metrics():
+    global mqtt_errors
+    # Total publish attempts: successes + errors
+    total_attempts = len(mqtt_publish_latencies) + mqtt_errors
+    if total_attempts > 0:
+        error_rate = (mqtt_errors / total_attempts) * 100.0
+    else:
+        error_rate = 0.0
+    return error_rate, mqtt_errors, total_attempts
+
+def calc_mqtt_throughput(interval):
+    # Count of successful publishes is the number of latency measurements
+    count = len(mqtt_publish_latencies)
+    throughput = count / interval if interval > 0 else 0.0
+    return throughput
+
+def log_mqtt_overall_metrics(event):
+    """
+    Aggregates MQTT metrics from the individual metric functions and logs them.
+    Also resets the metrics for the next interval.
+    So i have interval metrics and total metrics i need to differentiate them .. 
+    """
+    # Calculate time interval from the timer event
+    interval = event.current_real.to_sec() - (
+        event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0
+    )
+    
+    avg_latency, jitter, lengthOfLatency = calc_mqtt_latency()
+    bandwidth_metrics, totalBytes = calc_mqtt_bandwidth()
+    error_rate, errors, attempts  = calc_mqtt_error_metrics()
+    throughput = calc_mqtt_throughput(interval)
+
+    rospy.loginfo("----- MQTT Overall Metrics (Every 5 seconds) -----")
+    rospy.loginfo("Total Messages Published: %d", lengthOfLatency)
+    rospy.loginfo("Total Throughput: %.0f messages/s", throughput)
+    rospy.loginfo("Latency A: %.3f ms",avg_latency * 1000)
+    rospy.loginfo("Jitter Rate AVG: %.3f ms", jitter * 1000)
+    rospy.loginfo("Total Bandwidth: %d bytes", totalBytes)
+    rospy.loginfo("Bandwidth Rate: %d bytes/s", bandwidth_metrics/interval)
+    rospy.loginfo("Error Rate: %.3f%% (%d errors out of %d attempts)", error_rate, errors, attempts)
+    rospy.loginfo("--------------------------------")
+
+    # Reset MQTT-specific metrics after logging
+    global mqtt_total_bytes, mqtt_errors,mqtt_publish_latencies
+    mqtt_publish_latencies.clear()
+    mqtt_total_bytes = 0
+    mqtt_errors = 0
+
+
 # Setup MQTT client
 mqtt_client = mqtt.Client()
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 mqtt_client.on_message = on_mqtt_message
+mqtt_client.on_publish = on_publish
 
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
@@ -222,7 +303,6 @@ def imu_callback(imu_msg):
     finish_time = rospy.Time.now().to_sec()
     calcProcessingTime(start_time, finish_time, "imu")
 
-
 def getBatteryLevel():
     global latest_battery_percentage
     if latest_battery_percentage != None:
@@ -274,12 +354,25 @@ def calcProcessingTime(startTime, endTime, source):
     processing_time = endTime - startTime
     processing_records[source].append(processing_time)
 
+def mqttPublish(destination, msg, source=False):
+    try:
+        result, mid = mqtt_client.publish(destination, msg)
+        publish_timestamps[mid] = rospy.Time.now().to_sec()
+        # Also update bandwidth counter (see next section)
+        global mqtt_total_bytes
+        mqtt_total_bytes += len(msg)
+    except Exception as e:
+        rospy.logerr("Error publishing to topic %s: %s", destination, e)
+        # Record error for MQTT-specific metrics
+        global mqtt_errors
+        mqtt_errors += 1
+
 def helper(source,payload,latency,msg):
     
     sendBandwidth(source,payload)
     sendLatencyData(source,latency)
     try:
-        mqtt_client.publish(msg, payload)
+        mqttPublish(msg, payload, source)
     except Exception as e:
         rospy.logerr("Error publishing to topic %s for %s: %s", msg, source, e)
         error_counters[source] += 1
@@ -411,8 +504,6 @@ def log_battery_metrics(event):
     # Determine the interval (in seconds)
     interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
 
-    # Get the number of battery messages sent in this interval
-    battery_messages = throughput_counters["battery"]
 
     # Sum up the total bytes transmitted for battery in this interval
     battery_bytes = bandwidth_counters["battery"]
@@ -425,7 +516,6 @@ def log_battery_metrics(event):
     bandwidth_counters["battery"] = 0
 
 
-
 def mqtt_bridge_node():
     rospy.init_node('mqtt_bridge', anonymous=True)
     # Subscribe to each ROS topic with its corresponding callback
@@ -434,8 +524,9 @@ def mqtt_bridge_node():
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
 
-    rospy.Timer(rospy.Duration(5.0), log_metrics)
-    rospy.Timer(rospy.Duration(6.0), log_battery_metrics)
+    # rospy.Timer(rospy.Duration(5.0), log_metrics)
+    rospy.Timer(rospy.Duration(5.0), log_mqtt_overall_metrics)
+    # rospy.Timer(rospy.Duration(6.0), log_battery_metrics)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
