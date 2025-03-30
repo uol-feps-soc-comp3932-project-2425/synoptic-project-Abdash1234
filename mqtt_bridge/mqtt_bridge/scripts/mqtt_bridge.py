@@ -3,7 +3,7 @@ import json, rospy
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
-import statistics
+import statistics, hashlib, psutil
 
 # MQTT settings
 MQTT_BROKER = "localhost"
@@ -63,16 +63,29 @@ processing_records = {
     "imu": []
 }
 
-# MQTT callback for incoming messages (if needed)
-def on_mqtt_message(client, userdata, msg):
-    rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
-
 # Global dictionary to store publish timestamps
 publish_timestamps = {}
 mqtt_publish_latencies = []  # To store latencies for statistics
 mqtt_errors = 0
 mqtt_total_bytes = 0
 mqtt_overall_bytes = 0
+duplicate_count = 0
+message_hash_counts = {}
+
+# MQTT callback for incoming messages (if needed)
+def on_mqtt_message(client, userdata, msg):
+    # Compute hash for the incoming message payload
+    global duplicate_count
+    payload_hash = hashlib.sha256(msg.payload).hexdigest()
+    # Increment the count for this payload hash
+    if payload_hash in message_hash_counts:
+        message_hash_counts[payload_hash] += 1
+        # Every message beyond the first is considered a duplicate
+        duplicate_count += 1
+    else:
+        message_hash_counts[payload_hash] = 1
+    rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
+
 
 def on_publish(client, userdata, mid):
     global publish_timestamps, mqtt_publish_latencies
@@ -114,6 +127,41 @@ def calc_mqtt_throughput(interval):
     throughput = count / interval if interval > 0 else 0.0
     return throughput
 
+def calc_mqtt_duplicate_count():
+    global duplicate_count,message_hash_counts
+    # Count of duplicate messages is the number of duplicates found
+    total_messages = sum(message_hash_counts.values())
+    duplicate_rate = (duplicate_count/total_messages) * 100.0 if total_messages > 0 else 0.0
+    return duplicate_count, duplicate_rate
+
+def calc_avg_payload_size():
+    global mqtt_total_bytes, mqqt_publish_latencies
+    count = len(mqtt_publish_latencies)
+    if count > 0:
+        avg_payload_size = mqtt_total_bytes / count
+    else:
+        avg_payload_size = 0
+    return avg_payload_size
+
+def get_cpu_usage():
+    # Returns the current CPU usage percentage
+    return psutil.cpu_percent(interval=None)
+
+def get_memory_usage():
+    # Returns the current memory usage percentage
+    mem = psutil.virtual_memory()
+    return mem.percent
+
+def log_resource_utilization(event):
+    cpu_usage = get_cpu_usage()           # e.g., 15.3 (%)
+    memory_usage = get_memory_usage()     # e.g., 42.7 (%)#
+    battery_level = getBatteryLevel()     # Assuming this returns a fraction (0 to 1)
+    if(battery_level == None):
+        battery_level = 100
+    
+    rospy.loginfo("Resource Utilization: CPU: %.1f%%, Memory: %.1f%%, Battery: %.1f%%",cpu_usage, memory_usage, battery_level * 100)
+
+
 def log_mqtt_overall_metrics(event):
     """
     Aggregates MQTT metrics from the individual metric functions and logs them.
@@ -129,22 +177,28 @@ def log_mqtt_overall_metrics(event):
     bandwidth_metrics, totalBytes = calc_mqtt_bandwidth()
     error_rate, errors, attempts  = calc_mqtt_error_metrics()
     throughput = calc_mqtt_throughput(interval)
+    dupeCount, dupeRate = calc_mqtt_duplicate_count()
+    avg_payload_size = calc_avg_payload_size()
 
     rospy.loginfo("----- MQTT Overall Metrics (Every 5 seconds) -----")
     rospy.loginfo("Total Messages Published: %d", lengthOfLatency)
     rospy.loginfo("Total Throughput: %.0f messages/s", throughput)
-    rospy.loginfo("Latency A: %.3f ms",avg_latency * 1000)
+    rospy.loginfo("Latency AVG: %.3f ms",avg_latency * 1000)
     rospy.loginfo("Jitter Rate AVG: %.3f ms", jitter * 1000)
     rospy.loginfo("Total Bandwidth: %d bytes", totalBytes)
     rospy.loginfo("Bandwidth Rate: %d bytes/s", bandwidth_metrics/interval)
+    rospy.loginfo("Average Payload Size: %d bytes", avg_payload_size)
     rospy.loginfo("Error Rate: %.3f%% (%d errors out of %d attempts)", error_rate, errors, attempts)
+    rospy.loginfo("Duplicate Count: %d", dupeCount)
+    rospy.loginfo("Duplicate Rate: %.3f%%", dupeRate)
     rospy.loginfo("--------------------------------")
 
     # Reset MQTT-specific metrics after logging
-    global mqtt_total_bytes, mqtt_errors,mqtt_publish_latencies
+    global mqtt_total_bytes, mqtt_errors,mqtt_publish_latencies, duplicate_count
     mqtt_publish_latencies.clear()
     mqtt_total_bytes = 0
     mqtt_errors = 0
+    duplicate_count = 0
 
 
 # Setup MQTT client
@@ -526,6 +580,7 @@ def mqtt_bridge_node():
 
     # rospy.Timer(rospy.Duration(5.0), log_metrics)
     rospy.Timer(rospy.Duration(5.0), log_mqtt_overall_metrics)
+    rospy.Timer(rospy.Duration(5.0), lambda event: log_resource_utilization(event))
     # rospy.Timer(rospy.Duration(6.0), log_battery_metrics)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
