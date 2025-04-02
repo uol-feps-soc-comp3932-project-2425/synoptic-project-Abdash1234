@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="epuck_explorer" type="frontier_explorer.py" name="frontier_explorer" output="screen" />
+</launch>

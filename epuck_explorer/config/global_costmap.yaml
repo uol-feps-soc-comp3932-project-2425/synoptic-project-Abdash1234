@@ -1,0 +1,13 @@
+global_costmap:
+  global_frame: "map"
+  robot_base_frame: "epuck2_robot_0/base_link"
+  update_frequency: 5.0         # How many times per second to update the costmap.
+  publish_frequency: 1.0        # How many times per second to publish the costmap.
+  resolution: 0.05              # Meters per cell.
+  width: 100                    # Number of cells in x direction.
+  height: 100                   # Number of cells in y direction.
+  origin_x: -2.5                # x coordinate of the bottom-left corner of the map.
+  origin_y: -2.5                # y coordinate of the bottom-left corner of the map.
+  plugins:
+    - {name: "obstacle_layer", type: "costmap_2d/ObstacleLayer"}
+    - {name: "inflation_layer", type: "costmap_2d/InflationLayer"}

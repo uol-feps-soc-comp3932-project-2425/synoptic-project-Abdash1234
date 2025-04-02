@@ -2,3 +2,4 @@
 *.txt
 !CMakeLists.txt
 !cmake/
+*.pyc

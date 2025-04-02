@@ -1,0 +1,11 @@
+<launch>
+  <!-- Load costmap parameters -->
+  <rosparam file="$(find epuck_explorer)/config/global_costmap.yaml" command="load" />
+
+  <!-- Launch move_base by specifying its package and node type -->
+  <node pkg="move_base" type="move_base" name="move_base" output="screen">
+    <param name="base_frame" value="epuck2_robot_0/base_link"/>
+    <param name="odom_frame" value="odom"/>
+    <param name="map_update_interval" value="1.0"/>
+  </node>
+</launch>

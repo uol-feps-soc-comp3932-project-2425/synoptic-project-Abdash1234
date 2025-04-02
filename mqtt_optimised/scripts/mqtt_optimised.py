@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import json, rospy
+import random
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
 import statistics
-import cbor2, hashlib, psutil
+import cbor2, hashlib, psutil, threading, time
+from geometry_msgs.msg import Twist
 
 # MQTT settings
 MQTT_BROKER = "localhost"
@@ -16,6 +18,7 @@ MQTT_IMU     = "robot/imu"
 MQTT_LATENCY = "robot/latency"
 MQTT_THROUGHPUT = "robot/throughput"
 MQTT_DATA = "robot/data"
+MQTT_OPTIMISED_COMMAND = "optimised/command"
 
 latest_battery_percentage = None
 overall_mean_latency = None
@@ -67,8 +70,6 @@ processing_records = {
     "imu": []
 }
 
-
-
 # Global dictionary to store publish timestamps
 publish_timestamps = {}
 mqtt_publish_latencies = []  # To store latencies for statistics
@@ -78,9 +79,16 @@ mqtt_overall_bytes = 0
 duplicate_count = 0
 message_hash_counts = {}
 qos_decision_log = []  # Global list to store QoS decision logs
+current_qos = 0
+qos_lock = threading.Lock()
+MQTT_RAW_COMMAND = "raw/command"
+cmd_pub = 0
+
 
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
+    if msg.topic == MQTT_RAW_COMMAND:
+        readMessage(msg)
     global duplicate_count
     # Compute hash for the incoming message payload
     payload_hash = hashlib.sha256(msg.payload).hexdigest()
@@ -93,6 +101,64 @@ def on_mqtt_message(client, userdata, msg):
     else:
         message_hash_counts[payload_hash] = 1
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
+
+def readMessage(msg):
+    global mqtt_client
+    try:
+        # Decode the incoming JSON message
+        command_data = json.loads(msg.payload.decode('utf-8'))
+        rospy.loginfo("Received raw command: %s", command_data)
+        
+        # Convert the command into a ROS Twist message based on the command type
+        twist = Twist()
+        cmd = command_data.get("command", "")
+        
+        if cmd == "go_forward":
+            twist.linear.x = 2  # Forward speed (adjust as needed)
+            twist.angular.z = 0.0
+        elif cmd == "go_backwards":
+            twist.linear.x = -0.5  # Backward speed
+            twist.angular.z = 0.0
+        elif cmd == "stop":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.0
+        elif cmd == "turn_right_90":
+            twist.linear.x = 0.0
+            twist.angular.z = -0.5  # Negative angular for right turn
+        elif cmd == "turn_left_90":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.5   # Positive angular for left turn
+        elif cmd == "rotate_180":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.5   # Use a fixed angular speed (assume left turn; adjust if needed)
+        else:
+            rospy.logwarn("Unknown command received: %s", cmd)
+        
+        # Convert the Twist message to a dictionary for MQTT transmission
+        twist_dict = {
+            "linear": {
+                "x": twist.linear.x,
+                "y": twist.linear.y,
+                "z": twist.linear.z
+            },
+            "angular": {
+                "x": twist.angular.x,
+                "y": twist.angular.y,
+                "z": twist.angular.z
+            }
+        }
+        
+        # Serialize the dictionary using CBOR
+        payload = cbor2.dumps(twist_dict)
+        
+        # Publish the optimised command to the MQTT topic
+        mqttPublish(MQTT_OPTIMISED_COMMAND, payload, "command")
+        rospy.loginfo("Published optimised command to MQTT: %s", twist_dict)
+        
+    except Exception as e:
+        rospy.logerr("Error processing command: %s", e)
+
+
 
 def on_publish(client, userdata, mid):
     global publish_timestamps, mqtt_publish_latencies
@@ -224,7 +290,6 @@ mqtt_client = mqtt.Client()
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 mqtt_client.on_message = on_mqtt_message
 mqtt_client.on_publish = on_publish 
-
 
 # Callback for BatteryState messages
 def battery_callback(batt_msg):
@@ -392,12 +457,6 @@ def getBatteryLevel():
 def getCurrentAverageLatency():
     return overall_mean_latency
 
-# def getBandwidth():
-#     return bandwidth_counters
-
-# def ErrorRate():    
-#     return overall_error_rate
-
 def defineEvents():
     # Define events based on the metrics
     # For example, if the latency is above a certain threshold, trigger an event
@@ -416,21 +475,21 @@ def normaliseLatency(latency, minLatency = 0.001, maxLatency = 0.1):
     else:
         return (latency - minLatency) / (maxLatency - minLatency)
 
-def normaliseBandwidth(low_bw = 1000, high_bw = 100000):
-    if overall_bandwidth_usage <= low_bw:
+def normaliseBandwidth(bandwidth, low_bw = 1000, high_bw = 100000):
+    if bandwidth <= low_bw:
         return 0.0
-    elif overall_bandwidth_usage >= high_bw:
+    elif bandwidth >= high_bw:
         return 1.0
     else:
-        return (overall_bandwidth_usage - low_bw) / (high_bw - low_bw)
+        return (bandwidth - low_bw) / (high_bw - low_bw)
     
-def normaliseJitter(minJitter = 0, maxJitter = 0.005):
-    if overall_processing_stdev < minJitter:
+def normaliseJitter(jitter, minJitter = 0, maxJitter = 0.005):
+    if jitter < minJitter:
         return 0.0
-    elif overall_processing_stdev > maxJitter:
+    elif jitter > maxJitter:
         return 1.0
     else:
-        return (overall_processing_stdev - minJitter) / (maxJitter - minJitter)
+        return (jitter - minJitter) / (maxJitter - minJitter)
 
 def calcScore(batteryLevel, latency, bandwidth, jitter, errorRate):
     # Normalise the values
@@ -457,38 +516,56 @@ def calcScore(batteryLevel, latency, bandwidth, jitter, errorRate):
     return score
 
 def setQoS():
-    # Get current metrics (make sure these globals are updated from your log_metrics routine)
-    chosen_qos = 0 
-    global overall_mean_latency, overall_error_rate, overall_bandwidth_usage, overall_processing_stdev, overall_error_rate, qos_decision_log 
-    if overall_mean_latency is None or overall_error_rate is None or overall_bandwidth_usage is None or overall_processing_stdev is None:
+    chosen_qos = 0
+
+    battery_percentage = getBatteryLevel()
+    mqtt_avg_latency, mqtt_jitter, mqtt_length = calc_mqtt_latency()
+    mqtt_bandwidth_usage, _ = calc_mqtt_bandwidth()
+    mqtt_error_rate, mqtt_errors, mqtt_attempts = calc_mqtt_error_metrics()
+
+    # Check if all metrics are zero (i.e., no data has been collected)
+    if mqtt_avg_latency == 0 and mqtt_bandwidth_usage == 0 and mqtt_error_rate == 0 and mqtt_jitter == 0 and mqtt_errors == 0:
         qos_decision_log.append({"test": "no metrics available"})
         return 0
-    battery_percentage = getBatteryLevel()  # convert fraction to percentage
 
-    score = calcScore(battery_percentage, overall_mean_latency, overall_bandwidth_usage, overall_processing_stdev, overall_error_rate)
-    # Set
+    # Compute score using MQTT metrics
+    score = calcScore(battery_percentage, mqtt_avg_latency, mqtt_bandwidth_usage, mqtt_jitter, mqtt_error_rate)
     if score < 0.3:
         chosen_qos = 0
     elif score < 0.6:
         chosen_qos = 1
     else:
         chosen_qos = 2
-    
+
     qos_decision_log.append({
         "timestamp": float(rospy.Time.now().to_sec()),
         "battery": float(battery_percentage),
-        "avg_latency": float(overall_mean_latency),
-        "bandwidth": float(overall_bandwidth_usage),
-        "jitter": float(overall_processing_stdev),
-        "error_rate": float(overall_error_rate),
+        "mqtt_avg_latency": float(mqtt_avg_latency),
+        "mqtt_bandwidth_usage": float(mqtt_bandwidth_usage),
+        "mqtt_jitter": float(mqtt_jitter),
+        "mqtt_error_rate": float(mqtt_error_rate),
         "score": float(score),
         "chosen_qos": int(chosen_qos)
     })
 
     return chosen_qos
 
+def qos_updater():
+    global current_qos
+    while not rospy.is_shutdown():
+        # Compute the new QoS value using your existing function.
+        # (This assumes setQoS() returns an integer QoS value.)
+        new_qos = setQoS()
+        with qos_lock:
+            current_qos = new_qos
+        rospy.loginfo("Updated QoS to: %d", new_qos)
+        time.sleep(2)  # Update every 2 seconds (adjust as needed)
+
 def mqttPublish(destination, msg, source=False):
-    qosValue = setQoS()
+    # qosValue = setQoS()
+    global current_qos
+    with qos_lock:
+        qosValue = current_qos if current_qos is not None else 0
     try:
         result, mid = mqtt_client.publish(destination, msg, qos=qosValue)
         publish_timestamps[mid] = rospy.Time.now().to_sec()
@@ -573,91 +650,6 @@ def write_metrics_to_file(metrics):
         # Write the metrics with a newline separator
         f.write(metrics_str + "\n")
 
-def log_metrics(event):
-    global throughput_counters, latency_records, error_counters, processing_records,overall_mean_latency, overall_processing_stdev, overall_error_rate, overall_bandwidth_usage
-    interval = event.current_real.to_sec() - (event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0)
-    battery_throughput = throughput_counters["battery"] / interval
-    odom_throughput = throughput_counters["odom"] / interval
-    scan_throughput = throughput_counters["scan"] / interval
-    imu_throughput = throughput_counters["imu"] / interval
-
-    throughput_data = {
-        "battery_msg_per_sec": battery_throughput,
-        "odom_msg_per_sec": odom_throughput,
-        "scan_msg_per_sec": scan_throughput,
-        "imu_msg_per_sec": imu_throughput,
-    }
-
-    # Calculate latency stats for each topic
-    latency_stats = {}
-    all_latencies = []
-    for topic in latency_records:
-        all_latencies.extend(latency_records[topic])
-        if latency_records[topic]:
-            mean_latency = statistics.mean(latency_records[topic])
-            stdev_latency = statistics.stdev(latency_records[topic]) if len(latency_records[topic]) > 1 else 0.0
-            jitter = max(latency_records[topic]) - min(latency_records[topic])
-        else:
-            mean_latency = stdev_latency = jitter = 0.0
-        latency_stats[topic + "_latency_mean"] = mean_latency
-        latency_stats[topic + "_latency_stdev"] = stdev_latency
-        latency_stats[topic + "_jitter"] = jitter
-        latency_records[topic].clear()  # Reset for next interval
-
-    if all_latencies:
-        overall_mean_latency = statistics.mean(all_latencies)
-    else:
-        overall_mean_latency = 0.0
-
-    # Calculate processing overhead stats for each topic
-    processing_stats = {}
-    all_processing = []
-    for topic in processing_records:
-        # Make a local copy of the data to avoid concurrent modifications
-        local_data = list(processing_records[topic])
-        # Aggregate all processing times across topics
-        all_processing.extend(local_data)
-        
-        if local_data:
-            mean_processing = statistics.mean(local_data)
-            stdev_processing = statistics.stdev(local_data) if len(local_data) > 1 else 0.0
-            # Here, jitter is defined as the range.
-            processing_jitter = max(local_data) - min(local_data)
-        else:
-            mean_processing = stdev_processing = processing_jitter = 0.0
-            
-        processing_stats[topic + "_processing_mean"] = mean_processing
-        processing_stats[topic + "_processing_stdev"] = stdev_processing
-        processing_stats[topic + "_processing_jitter"] = processing_jitter
-        
-        processing_records[topic].clear()  # Clear the original list for the next interval
-
-    # Compute overall standard deviation for all processing times (as a measure of overall jitter)
-    if len(all_processing) > 1:
-        overall_processing_stdev = statistics.stdev(all_processing)
-    else:
-        overall_processing_stdev = 0.0
-
-    # (Bandwidth is being reported per message in sendBandwidth)
-    # Calculate error percentages for each topic
-    error_percentages = {}
-    overall_errors = 0
-    overall_attempts = 0
-    for topic in error_counters:
-        topic_attempts = throughput_counters[topic] + error_counters[topic]
-        if topic_attempts > 0:
-            error_percentages[topic + "_error_pct"] = (error_counters[topic] / topic_attempts) * 100
-        else:
-            error_percentages[topic + "_error_pct"] = 0.0
-        overall_errors += error_counters[topic]
-        overall_attempts += topic_attempts
-
-    overall_error_rate = (overall_errors / overall_attempts) * 100 if overall_attempts > 0 else 0.0
-
-    # Calculate bandwidth usage per topic and overall (in bytes per second)
-    overall_bytes = sum(bandwidth_counters.values())
-    overall_bandwidth_usage = overall_bytes / interval  
-
 
     metrics = {
         "throughput": throughput_data,
@@ -689,25 +681,32 @@ def log_metrics(event):
 
 def mqtt_bridge_node():
     rospy.init_node('mqtt_bridge', anonymous=True)
+
+    qos_thread = threading.Thread(target=qos_updater, daemon=True)
+    qos_thread.start()
     # Subscribe to each ROS topic with its corresponding callback
     rospy.Subscriber("/battery", BatteryState, battery_callback)
     rospy.Subscriber("/odom", Odometry, odom_callback)
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
 
+    cmd_pub = rospy.Publisher('/mobile_base/cmd_vel', Twist, queue_size=10)
+
     # rospy.Timer(rospy.Duration(4), lambda event: publish_aggregated_buffer(battery_buffer, MQTT_BATTERY))
-    # rospy.Timer(rospy.Duration(5.0), log_metrics)
 
 
     rospy.Timer(rospy.Duration(5.0), log_mqtt_overall_metrics)
     rospy.Timer(rospy.Duration(5.0), lambda event: log_resource_utilization(event))
-    rospy.Timer(rospy.Duration(5.0), lambda event: writeQoSLog())
+    # rospy.Timer(rospy.Duration(5.0), lambda event: writeQoSLog())
     
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
+    mqtt_client.subscribe(MQTT_RAW_COMMAND, 0)
     rospy.spin()
     mqtt_client.loop_stop()
+
+
 
 if __name__ == '__main__':
     try:
