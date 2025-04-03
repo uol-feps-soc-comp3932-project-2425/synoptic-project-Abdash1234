@@ -8,6 +8,9 @@ MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 MQTT_TOPIC = "raw/command"  # Topic for sending raw commands
 
+# Global speed variable (adjust as needed)
+speed = 2
+
 def publish_command(command_data):
     """
     Publishes the given command_data (a dictionary) to the MQTT topic.
@@ -22,11 +25,13 @@ def publish_command(command_data):
     client.disconnect()
 
 def send_go_forward():
-    command = {"command": "go_forward"}
+    global speed
+    command = {"command": "go_forward", "speed": speed}
     publish_command(command)
 
 def send_go_backwards():
-    command = {"command": "go_backwards"}
+    global speed
+    command = {"command": "go_backwards", "speed": speed}
     publish_command(command)
 
 def send_stop():
@@ -41,13 +46,38 @@ def send_turn_left():
     command = {"command": "turn_left_90"}
     publish_command(command)
 
-def send_rotate_180():
-    command = {"command": "rotate_180"}
+def send_rotate():
+    command = {"command": "rotate"}
     publish_command(command)
 
+def increase_speed():
+    global speed
+    speed += 1
+    speed_label.config(text=f"Speed: {speed}")
+
+def decrease_speed():
+    global speed
+    if speed > 0:
+        speed -= 1
+    speed_label.config(text=f"Speed: {speed}")
+
 def main():
+    global speed_label, speed
     root = tk.Tk()
     root.title("MQTT Command Publisher")
+
+    # Frame for speed control
+    speed_frame = tk.Frame(root)
+    speed_frame.pack(pady=5)
+    
+    speed_label = tk.Label(speed_frame, text=f"Speed: {speed}", font=("Arial", 12))
+    speed_label.pack(side=tk.LEFT, padx=5)
+    
+    minus_button = tk.Button(speed_frame, text="-", command=decrease_speed, width=3)
+    minus_button.pack(side=tk.LEFT, padx=5)
+    
+    plus_button = tk.Button(speed_frame, text="+", command=increase_speed, width=3)
+    plus_button.pack(side=tk.LEFT, padx=5)
 
     # Create buttons for each command
     tk.Button(root, text="Go Forward", command=send_go_forward, width=20).pack(pady=5)
@@ -55,7 +85,7 @@ def main():
     tk.Button(root, text="Stop", command=send_stop, width=20).pack(pady=5)
     tk.Button(root, text="Turn Right 90°", command=send_turn_right, width=20).pack(pady=5)
     tk.Button(root, text="Turn Left 90°", command=send_turn_left, width=20).pack(pady=5)
-    tk.Button(root, text="Rotate 180°", command=send_rotate_180, width=20).pack(pady=5)
+    tk.Button(root, text="Rotate 180°", command=send_rotate, width=20).pack(pady=5)
 
     root.mainloop()
 

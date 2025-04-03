@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 import json, rospy
-import random
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
-import statistics
+import statistics, math, tf
 import cbor2, hashlib, psutil, threading, time
 from geometry_msgs.msg import Twist
+
+
+class EventManager:
+    def __init__(self):
+        self.listeners = {}
+
+    def register(self, event_name, callback):
+        if event_name not in self.listeners:
+            self.listeners[event_name] = []
+        self.listeners[event_name].append(callback)
+
+    def trigger(self, event_name, *args, **kwargs):
+        if event_name in self.listeners:
+            for callback in self.listeners[event_name]:
+                callback(*args, **kwargs)
 
 # MQTT settings
 MQTT_BROKER = "localhost"
@@ -25,6 +39,13 @@ overall_mean_latency = None
 overall_processing_stdev = None
 overall_error_rate = None
 overall_bandwidth_usage = None
+
+
+turning = False
+initial_theta = None
+current_turn_threshold = None  # In radians
+event_manager = EventManager()
+
 
 
 # Global throughput counters (messages counted per topic)
@@ -85,6 +106,14 @@ MQTT_RAW_COMMAND = "raw/command"
 cmd_pub = 0
 
 
+def on_high_latency(topic, latency):
+    rospy.logwarn("High latency event: topic '%s' latency = %.3f sec", topic, latency)
+    global current_qos
+    current_qos = 2
+    rospy.loginfo("QoS updated to: %d", current_qos)
+
+event_manager.register("high_latency", on_high_latency)
+
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
     if msg.topic == MQTT_RAW_COMMAND:
@@ -103,38 +132,66 @@ def on_mqtt_message(client, userdata, msg):
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
 
 def readMessage(msg):
-    global mqtt_client
+    global mqtt_client, turning, initial_theta, current_turn_threshold, cmd_pub
     try:
         # Decode the incoming JSON message
         command_data = json.loads(msg.payload.decode('utf-8'))
         rospy.loginfo("Received raw command: %s", command_data)
+        
+        # Read the speed from the command data; default to 2 if not provided.
+        speed_val = command_data.get("speed", 2)
         
         # Convert the command into a ROS Twist message based on the command type
         twist = Twist()
         cmd = command_data.get("command", "")
         
         if cmd == "go_forward":
-            twist.linear.x = 2  # Forward speed (adjust as needed)
+            twist.linear.x = speed_val  # Use speed_val
             twist.angular.z = 0.0
+            rospy.loginfo("Executing go_forward command with speed: %s", speed_val)
+            # cmd_pub.publish(twist)
         elif cmd == "go_backwards":
-            twist.linear.x = -0.5  # Backward speed
+            twist.linear.x = -speed_val  # Use -speed_val for backwards motion
             twist.angular.z = 0.0
+            rospy.loginfo("Executing go_backwards command with speed: %s", speed_val)
+            # cmd_pub.publish(twist)
         elif cmd == "stop":
             twist.linear.x = 0.0
             twist.angular.z = 0.0
+            rospy.loginfo("Executing stop command")
+            # cmd_pub.publish(twist)
+            # Also cancel any turning state
+            turning = False
+            initial_theta = None
+            current_turn_threshold = None
         elif cmd == "turn_right_90":
             twist.linear.x = 0.0
             twist.angular.z = -0.5  # Negative angular for right turn
+            current_turn_threshold = math.pi / 2  # 90 degrees
+            turning = True
+            initial_theta = None  # Will be set in the odom_turning callback
+            rospy.loginfo("Executing turn_right_90 command")
+            # cmd_pub.publish(twist)
         elif cmd == "turn_left_90":
             twist.linear.x = 0.0
             twist.angular.z = 0.5   # Positive angular for left turn
-        elif cmd == "rotate_180":
+            current_turn_threshold = math.pi / 2  # 90 degrees
+            turning = True
+            initial_theta = None
+            rospy.loginfo("Executing turn_left_90 command")
+            # cmd_pub.publish(twist)
+        elif cmd == "rotate":
             twist.linear.x = 0.0
-            twist.angular.z = 0.5   # Use a fixed angular speed (assume left turn; adjust if needed)
+            twist.angular.z = 0.5   # Adjust as needed (could be negative for right turn)
+            current_turn_threshold = math.pi  # 180 degrees
+            turning = True
+            initial_theta = None
+            rospy.loginfo("Executing rotate command")
+            # cmd_pub.publish(twist)
         else:
             rospy.logwarn("Unknown command received: %s", cmd)
         
-        # Convert the Twist message to a dictionary for MQTT transmission
+        # Convert the Twist message to a dictionary for MQTT transmission (if needed)
         twist_dict = {
             "linear": {
                 "x": twist.linear.x,
@@ -148,17 +205,13 @@ def readMessage(msg):
             }
         }
         
-        # Serialize the dictionary using CBOR
+        # Serialize the dictionary using CBOR and publish to the MQTT optimized command topic
         payload = cbor2.dumps(twist_dict)
-        
-        # Publish the optimised command to the MQTT topic
         mqttPublish(MQTT_OPTIMISED_COMMAND, payload, "command")
         rospy.loginfo("Published optimised command to MQTT: %s", twist_dict)
         
     except Exception as e:
         rospy.logerr("Error processing command: %s", e)
-
-
 
 def on_publish(client, userdata, mid):
     global publish_timestamps, mqtt_publish_latencies
@@ -301,6 +354,11 @@ def battery_callback(batt_msg):
     original_stamp = batt_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
     latency_records["battery"].append(latency)
+
+    latency_threshold = 0.1
+    if latency > latency_threshold:
+        event_manager.trigger("high_latency", "battery", latency)
+
 
     latest_battery_percentage = batt_msg.percentage
 
@@ -445,6 +503,35 @@ def imu_callback(imu_msg):
 
     finish_time = rospy.Time.now().to_sec()
     calcProcessingTime(start_time, finish_time, "imu")
+
+def odom_turning_callback(odom_msg):
+    global turning, initial_theta, current_turn_threshold, cmd_pub
+    if not turning:
+        return  # Not in turning mode; do nothing.
+    
+    # Extract current orientation (yaw) from the odometry message
+    q = odom_msg.pose.pose.orientation
+    # Use tf to convert quaternion to Euler angles; we only need yaw.
+    (_, _, current_theta) = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+    
+    if initial_theta is None:
+        # Record the initial orientation when the turn starts.
+        initial_theta = current_theta
+        rospy.loginfo("Recorded initial orientation: %.3f radians", initial_theta)
+    else:
+        # Check if the robot has turned the required angle.
+        if has_turned(initial_theta, current_theta, current_turn_threshold):
+            rospy.loginfo("Turn complete: initial=%.3f, current=%.3f (threshold=%.3f)", 
+                          initial_theta, current_theta, current_turn_threshold)
+            # Publish a stop command to halt turning.
+            stop_twist = Twist()
+            stop_twist.linear.x = 0.0
+            stop_twist.angular.z = 0.0
+            cmd_pub.publish(stop_twist)
+            # Reset turning state.
+            turning = False
+            initial_theta = None
+            current_turn_threshold = None
 
 def getBatteryLevel():
     global latest_battery_percentage
@@ -679,7 +766,18 @@ def write_metrics_to_file(metrics):
     error_counters["scan"] = 0
     error_counters["imu"] = 0
 
+def has_turned(initial, current, threshold):
+    """
+    Normalize the angular difference to [-pi, pi] and return True if
+    the absolute difference is greater than or equal to threshold.
+    """
+    diff = current - initial
+    diff = (diff + math.pi) % (2 * math.pi) - math.pi
+    return abs(diff) >= threshold
+
+
 def mqtt_bridge_node():
+    global cmd_pub
     rospy.init_node('mqtt_bridge', anonymous=True)
 
     qos_thread = threading.Thread(target=qos_updater, daemon=True)
@@ -689,8 +787,10 @@ def mqtt_bridge_node():
     rospy.Subscriber("/odom", Odometry, odom_callback)
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
+    rospy.Subscriber("/odom", Odometry, odom_turning_callback)
 
-    cmd_pub = rospy.Publisher('/mobile_base/cmd_vel', Twist, queue_size=10)
+
+    # cmd_pub = rospy.Publisher('/mobile_base/cmd_vel', Twist, queue_size=10)
 
     # rospy.Timer(rospy.Duration(4), lambda event: publish_aggregated_buffer(battery_buffer, MQTT_BATTERY))
 
