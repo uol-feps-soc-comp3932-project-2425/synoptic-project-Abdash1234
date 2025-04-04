@@ -1,21 +1,25 @@
 # mqtt_handler.py
 import paho.mqtt.client as mqtt
-import json, cbor2
+import json, cbor2, rospy
 import logging
+import hashlib
 from config import MQTT_BROKER, MQTT_PORT, MQTT_RAW_COMMAND
 
 class MQTTHandler:
-    def __init__(self, broker=MQTT_BROKER, port=MQTT_PORT, topics=None, movement_controller=None):
+    def __init__(self, broker=MQTT_BROKER, port=MQTT_PORT, topics=None, movement_controller=None, metrics=None, qos = None):
         self.broker = broker
         self.port = port
         self.topics = topics  # A dict of topics to subscribe/publish to
         self.movement_controller = movement_controller  # Dependency injection of movement controller
+        self.metrics = metrics
+        self.qos_manager = qos
         self.client = mqtt.Client()
         self._setup_callbacks()
     
     def _setup_callbacks(self):
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        self.client.on_publish = self.on_publish
     
     def on_connect(self, client, userdata, flags, rc):
         logging.info("Connected with result code %s", rc)
@@ -26,6 +30,16 @@ class MQTTHandler:
         logging.info("Received message on topic %s: %s", msg.topic, msg.payload.decode())
         print("HELLO")
         # Check if the message is on the raw command topic.
+
+        if self.metrics:
+            payload_hash = hashlib.sha256(msg.payload).hexdigest()
+            if payload_hash in self.metrics.message_hash_counts:
+                self.metrics.message_hash_counts[payload_hash] += 1
+                # Every message beyond the first is considered a duplicate.
+                self.metrics.duplicate_count += 1
+            else:
+                self.metrics.message_hash_counts[payload_hash] = 1
+
         if msg.topic == MQTT_RAW_COMMAND:
             try:
                 print("1")
@@ -43,10 +57,53 @@ class MQTTHandler:
     def connect(self):
         self.client.connect(self.broker, self.port, 60)
         self.client.loop_start()
-    
-    def publish(self, topic, payload, qos=0):
+
+    def publish(self, topic, payload, qos=None):
+        # If no QoS value is provided, get it from the qos_manager if available.
+        if qos is None:
+            if self.qos_manager is not None:
+                qos = self.qos_manager.getQoS()
+                # rospy.loginfo("Using dynamic QoS from qos_manager: %s", qos)
+            else:
+                qos = 0
+                rospy.loginfo("No qos_manager available; defaulting QoS to 0")
+        
+        # Ensure qos is a valid integer (should be between 0 and 2).
+        if qos is None:
+            rospy.logerr("QoS value is still None! Forcing default QoS 0.")
+            qos = 0
+
+        # Now call publish with a valid qos.
         result = self.client.publish(topic, payload, qos=qos)
+        
+        if result.rc == mqtt.MQTT_ERR_SUCCESS and self.metrics:
+            # Record the publish timestamp for latency calculation.
+            self.metrics.publish_timestamps[result.mid] = rospy.Time.now().to_sec()
+            # Estimate the total size of the MQTT message.
+            overhead = 4  # Estimated constant overhead (adjust if needed).
+            total_bytes = len(topic.encode('utf-8')) + len(payload) + overhead
+            self.metrics.mqtt_total_bytes += total_bytes
         return result
+
+    
+    def on_publish(self, client, userdata, mid):
+        if self.metrics:
+            # If a publish timestamp exists for this message, calculate latency.
+            if mid in self.metrics.publish_timestamps:
+                publish_time = self.metrics.publish_timestamps.pop(mid)
+                ack_time = rospy.Time.now().to_sec()
+                latency = ack_time - publish_time
+                self.metrics.mqtt_publish_latencies.append(latency)
+                # rospy.loginfo("Message %d published. Latency: %.3f seconds", mid, latency)
+            
+            # Optional: Update a published messages counter if desired.
+            # For example, you could add a 'published' counter in your throughput_counters.
+            if "published" not in self.metrics.throughput_counters:
+                self.metrics.throughput_counters["published"] = 0
+            self.metrics.throughput_counters["published"] += 1
+        
+        # Optionally, if you want to update bandwidth here (if not done during publish),
+        # you could add code here to update the total bytes published.
     
     def disconnect(self):
         self.client.loop_stop()

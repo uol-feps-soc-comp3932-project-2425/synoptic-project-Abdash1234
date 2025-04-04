@@ -6,7 +6,7 @@ import config  # Contains MQTT_BATTERY, etc.
 from sensor_msgs.msg import BatteryState, LaserScan, Imu
 from nav_msgs.msg import Odometry
 
-def battery_callback(batt_msg, mqtt_handler):
+def battery_callback(batt_msg, mqtt_handler, metrics):
     """
     Callback for processing BatteryState messages.
     
@@ -20,12 +20,14 @@ def battery_callback(batt_msg, mqtt_handler):
     """
     # Record start time for processing
     start_time = rospy.Time.now().to_sec()
+    metrics.update_throughput("battery", 1)
 
     # Compute latency: difference between current time and message timestamp.
     current_time = rospy.Time.now().to_sec()
     original_stamp = batt_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("Battery callback latency: %.3f seconds", latency)
+    metrics.record_latency("battery", latency)
+    # rospy.loginfo("Battery callback latency: %.3f seconds", latency)
     
     # If latency is high, log a warning (or trigger an event if you have an event system)
     latency_threshold = 0.1
@@ -51,15 +53,17 @@ def battery_callback(batt_msg, mqtt_handler):
     payload = cbor2.dumps(battery_data)
 
     # Publish the serialized payload to the MQTT battery topic
-    result = mqtt_handler.publish(config.MQTT_BATTERY, payload)
-    rospy.loginfo("Published battery data to MQTT (result: %s)", result)
+    mqtt_handler.publish(config.MQTT_BATTERY, payload)
+    # rospy.loginfo("Published battery data to MQTT (result: %s)", result)
 
     # Record finish time and compute processing time
     finish_time = rospy.Time.now().to_sec()
     processing_time = finish_time - start_time
-    rospy.loginfo("Battery callback processing time: %.3f seconds", processing_time)
+    # rospy.loginfo("Battery callback processing time: %.3f seconds", processing_time)
+    metrics.processing_records["battery"].append(processing_time)
+    metrics.update_bandwidth("battery", len(config.MQTT_ODOM.encode('utf-8')) + len(payload) + 4)
 
-def odom_callback(odom_msg, mqtt_handler):
+def odom_callback(odom_msg, mqtt_handler, metrics):
     """
     Callback for processing Odometry messages.
     
@@ -73,12 +77,14 @@ def odom_callback(odom_msg, mqtt_handler):
     """
     # Record the start time for processing
     start_time = rospy.Time.now().to_sec()
+    metrics.update_throughput("odom", 1)
     
     # Compute latency: current time minus the message's timestamp
     current_time = rospy.Time.now().to_sec()
     original_stamp = odom_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
-    rospy.loginfo("Odom callback latency: %.3f seconds", latency)
+    metrics.record_latency("odom", latency)
+    # rospy.loginfo("Odom callback latency: %.3f seconds", latency)
     
     # Prepare the odometry data payload
     odom_data = {
@@ -108,36 +114,31 @@ def odom_callback(odom_msg, mqtt_handler):
     payload = cbor2.dumps(odom_data)
     
     # Publish the serialized data to the MQTT odometry topic
-    result = mqtt_handler.publish(config.MQTT_ODOM, payload)
-    rospy.loginfo("Published odometry data to MQTT (result: %s)", result)
+    mqtt_handler.publish(config.MQTT_ODOM, payload)
+    # rospy.loginfo("Published odometry data to MQTT (result: %s)", result)
     
     # Record finish time and compute total processing time
     finish_time = rospy.Time.now().to_sec()
     processing_time = finish_time - start_time
-    rospy.loginfo("Odom callback processing time: %.3f seconds", processing_time)
+    # rospy.loginfo("Odom callback processing time: %.3f seconds", processing_time)
+    metrics.record_processing_time("odom", processing_time)
+    metrics.update_bandwidth("odom", len(config.MQTT_ODOM.encode('utf-8')) + len(payload) + 4)
 
-def scan_callback(scan_msg, mqtt_handler):
+def scan_callback(scan_msg, mqtt_handler, metrics):
     """
-    Callback for processing LaserScan messages.
-    
-    This function:
-      - Computes the latency of the message.
-      - Logs the latency.
-      - Packages scan data (header, angle parameters, ranges, intensities, etc.) into a dictionary.
-      - Serializes the data using CBOR.
-      - Publishes the serialized payload to the MQTT scan topic.
-      - Logs the processing time.
+    Process a LaserScan message:
+      - Update throughput and record latency.
+      - Package scan data and publish via MQTT.
+      - Record processing time.
     """
-    # Record start time for processing
     start_time = rospy.Time.now().to_sec()
-    
-    # Compute latency: current time minus the message's timestamp
+    metrics.update_throughput("scan", 1)
+
     current_time = rospy.Time.now().to_sec()
-    original_stamp = scan_msg.header.stamp.to_sec()
-    latency = current_time - original_stamp
-    rospy.loginfo("Scan callback latency: %.3f seconds", latency)
-    
-    # Prepare the LaserScan data payload
+    latency = current_time - scan_msg.header.stamp.to_sec()
+    metrics.record_latency("scan", latency)
+    # rospy.loginfo("Scan callback latency: %.3f seconds", latency)
+
     scan_data = {
         "header": {
             "frame_id": scan_msg.header.frame_id,
@@ -149,48 +150,33 @@ def scan_callback(scan_msg, mqtt_handler):
         "angle_min": scan_msg.angle_min,
         "angle_max": scan_msg.angle_max,
         "angle_increment": scan_msg.angle_increment,
-        "time_increment": scan_msg.time_increment,
-        "scan_time": scan_msg.scan_time,
-        "range_min": scan_msg.range_min,
-        "range_max": scan_msg.range_max,
-        "ranges": list(scan_msg.ranges),       # Convert tuple or iterable to list if needed
-        "intensities": list(scan_msg.intensities)  # Likewise for intensities
+        "ranges": list(scan_msg.ranges)
     }
-    
-    # Serialize the scan data using CBOR
     payload = cbor2.dumps(scan_data)
-    
-    # Publish the serialized payload to the MQTT scan topic
-    result = mqtt_handler.publish(config.MQTT_SCAN, payload)
-    rospy.loginfo("Published scan data to MQTT (result: %s)", result)
-    
-    # Record finish time and compute total processing time
+    mqtt_handler.publish(config.MQTT_SCAN, payload)
+    # rospy.loginfo("Published scan data to MQTT (result: %s)", result)
+
     finish_time = rospy.Time.now().to_sec()
     processing_time = finish_time - start_time
-    rospy.loginfo("Scan callback processing time: %.3f seconds", processing_time)   
+    # rospy.loginfo("Scan callback processing time: %.3f seconds", processing_time)
+    metrics.record_processing_time("scan", processing_time)
+    metrics.update_bandwidth("scan", len(config.MQTT_SCAN.encode('utf-8')) + len(payload) + 4)
 
-def imu_callback(imu_msg, mqtt_handler):
+def imu_callback(imu_msg, mqtt_handler, metrics):
     """
-    Callback for processing IMU messages.
-    
-    This function:
-      - Computes the latency of the message.
-      - Logs the latency.
-      - Packages IMU data (header, orientation, angular velocity, and linear acceleration) into a dictionary.
-      - Serializes the data using CBOR.
-      - Publishes the serialized payload to the MQTT IMU topic.
-      - Logs the processing time.
+    Process an IMU message:
+      - Update throughput and record latency.
+      - Package IMU data and publish via MQTT.
+      - Record processing time.
     """
-    # Record the start time for processing
     start_time = rospy.Time.now().to_sec()
-    
-    # Compute latency: current time minus the message's timestamp
+    metrics.update_throughput("imu", 1)
+
     current_time = rospy.Time.now().to_sec()
-    original_stamp = imu_msg.header.stamp.to_sec()
-    latency = current_time - original_stamp
-    rospy.loginfo("IMU callback latency: %.3f seconds", latency)
-    
-    # Prepare the IMU data payload
+    latency = current_time - imu_msg.header.stamp.to_sec()
+    metrics.record_latency("imu", latency)
+    # rospy.loginfo("IMU callback latency: %.3f seconds", latency)
+
     imu_data = {
         "header": {
             "frame_id": imu_msg.header.frame_id,
@@ -199,32 +185,29 @@ def imu_callback(imu_msg, mqtt_handler):
                 "nsecs": imu_msg.header.stamp.nsecs
             }
         },
-        "orientation": {
-            "x": imu_msg.orientation.x,
-            "y": imu_msg.orientation.y,
-            "z": imu_msg.orientation.z,
-            "w": imu_msg.orientation.w
+        "linear_acceleration": {
+            "x": imu_msg.linear_acceleration.x,
+            "y": imu_msg.linear_acceleration.y,
+            "z": imu_msg.linear_acceleration.z
         },
         "angular_velocity": {
             "x": imu_msg.angular_velocity.x,
             "y": imu_msg.angular_velocity.y,
             "z": imu_msg.angular_velocity.z
         },
-        "linear_acceleration": {
-            "x": imu_msg.linear_acceleration.x,
-            "y": imu_msg.linear_acceleration.y,
-            "z": imu_msg.linear_acceleration.z
+        "orientation": {
+            "x": imu_msg.orientation.x,
+            "y": imu_msg.orientation.y,
+            "z": imu_msg.orientation.z,
+            "w": imu_msg.orientation.w
         }
     }
-    
-    # Serialize the IMU data using CBOR
     payload = cbor2.dumps(imu_data)
-    
-    # Publish the serialized payload to the MQTT IMU topic
-    result = mqtt_handler.publish(config.MQTT_IMU, payload)
-    rospy.loginfo("Published IMU data to MQTT (result: %s)", result)
-    
-    # Record finish time and compute total processing time
+    mqtt_handler.publish(config.MQTT_IMU, payload)
+    # rospy.loginfo("Published IMU data to MQTT (result: %s)", result)
+
     finish_time = rospy.Time.now().to_sec()
     processing_time = finish_time - start_time
-    rospy.loginfo("IMU callback processing time: %.3f seconds", processing_time)   
+    # rospy.loginfo("IMU callback processing time: %.3f seconds", processing_time)
+    metrics.record_processing_time("imu", processing_time)
+    metrics.update_bandwidth("imu", len(config.MQTT_IMU.encode('utf-8')) + len(payload) + 4)

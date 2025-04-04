@@ -302,7 +302,6 @@ def writeQoSLog():
 def log_mqtt_overall_metrics(event):
 
     global battery_buffer
-
     # Calculate time interval from the timer event
     interval = event.current_real.to_sec() - (
         event.last_real.to_sec() if event.last_real else event.current_real.to_sec() - 1.0

@@ -5,13 +5,15 @@ import rospy
 import config 
 from mqtt_handler import MQTTHandler
 from ros_callbacks import battery_callback, odom_callback, scan_callback, imu_callback
+from qos_manager import QoSManager
 # from qos_manager import QoSManager
-import config
+import config, threading
 
 # # Import ROS message types
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
 from movement_controller import MovementController
+from metrics_manager import MetricsManager
 
 
 def main():
@@ -29,14 +31,14 @@ def main():
         "data": config.MQTT_DATA
     }
 }
-
-     # Step 1: Instantiate the MQTTHandler without a movement controller.
-    mqtt_handler = MQTTHandler(config.MQTT_BROKER, config.MQTT_PORT, topics, movement_controller=None)
+    metrics = MetricsManager()
+    metrics.start_timers()
+    qos_manager = QoSManager(metrics)
+    qos_thread = threading.Thread(target=qos_manager.start,daemon=True)
+    qos_thread.start()
     
-    # Step 2: Instantiate the MovementController, passing the mqtt_handler.
+    mqtt_handler = MQTTHandler(config.MQTT_BROKER, config.MQTT_PORT, topics, movement_controller=None,metrics=metrics,qos = qos_manager)
     movement_controller = MovementController(mqtt_handler)
-    
-    # Step 3: Inject the movement controller into the MQTTHandler.
     mqtt_handler.movement_controller = movement_controller
     
     # Connect to the MQTT broker
@@ -45,18 +47,12 @@ def main():
     
 # ...
 # When setting up your subscriber, use a lambda or partial to pass in your mqtt_handler:
-    rospy.Subscriber(config.ROS_BATTERY, BatteryState, lambda msg: battery_callback(msg, mqtt_handler))
-    rospy.Subscriber(config.ROS_ODOM, Odometry, lambda msg: odom_callback(msg, mqtt_handler))
-    rospy.Subscriber(config.ROS_SCAN, LaserScan, lambda msg: scan_callback(msg, mqtt_handler))
-    rospy.Subscriber(config.ROS_IMU, Imu, lambda msg: imu_callback(msg, mqtt_handler))
-
-    
+    rospy.Subscriber(config.ROS_BATTERY, BatteryState, lambda msg: battery_callback(msg, mqtt_handler, metrics))
+    rospy.Subscriber(config.ROS_ODOM, Odometry, lambda msg: odom_callback(msg, mqtt_handler, metrics))
+    rospy.Subscriber(config.ROS_SCAN, LaserScan, lambda msg: scan_callback(msg, mqtt_handler, metrics))
+    rospy.Subscriber(config.ROS_IMU, Imu, lambda msg: imu_callback(msg, mqtt_handler, metrics))
     
 
-    # rospy.Subscriber("/odom", Odometry, odom_callback)
-    # rospy.Subscriber("/scan", LaserScan, scan_callback)
-    # rospy.Subscriber("/imu", Imu, imu_callback)
-    # rospy.Subscriber("/odom", Odometry, odom_turning_callback)
     
     # mqtt_handler.publish(topics["publish"]["battery"], battery_payload)
 

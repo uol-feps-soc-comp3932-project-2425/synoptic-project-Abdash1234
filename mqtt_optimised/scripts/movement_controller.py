@@ -8,8 +8,9 @@ from geometry_msgs.msg import Twist
 from config import MQTT_OPTIMISED_COMMAND
 
 class MovementController:
-    def __init__(self, mqtt_handler):
+    def __init__(self, mqtt_handler, metrics = None):
         self.mqtt_handler = mqtt_handler  # Save the MQTT handler instance.
+        self.metrics = metrics            # Optional: MetricsManager instance.
         # State variables for turning.
         self.turning = False
         self.initial_theta = None
@@ -18,13 +19,21 @@ class MovementController:
     def process_command(self, command_data):
         """
         Process movement commands from raw MQTT message data and publish
-        a corresponding Twist command via MQTT.
+        a corresponding Twist command via MQTT. Also update movement metrics.
         """
+        start_time = rospy.Time.now().to_sec()
+        # If metrics is available, update throughput for movement commands.
+        if self.metrics:
+            # Optionally add a new key "movement" in your metrics manager
+            # If not present, you could use a default (or add the key on the fly).
+            if "movement" not in self.metrics.throughput_counters:
+                self.metrics.throughput_counters["movement"] = 0
+            self.metrics.update_throughput("movement", 1)
+
         twist = Twist()
         cmd = command_data.get("command", "")
         speed_val = command_data.get("speed", 2)
-        rospy.loginfo("IN THE FUNC")
-        print("IN THE FUNC")
+        rospy.loginfo("MovementController: Received command %s", cmd)
 
         if cmd == "go_forward":
             twist.linear.x = speed_val
@@ -70,6 +79,22 @@ class MovementController:
             self.publish_twist(twist)
         else:
             rospy.logwarn("Unknown movement command received: %s", cmd)
+
+        finish_time = rospy.Time.now().to_sec()
+        processing_time = finish_time - start_time
+        rospy.loginfo("MovementController: Processing time: %.3f seconds", processing_time)
+        if self.metrics:
+            self.metrics.record_processing_time("movement", processing_time)
+            # Optionally update bandwidth for movement command if desired.
+            # You can estimate the size similar to your other publish methods.
+            twist_dict = {
+                "linear": {"x": twist.linear.x, "y": twist.linear.y, "z": twist.linear.z},
+                "angular": {"x": twist.angular.x, "y": twist.angular.y, "z": twist.angular.z}
+            }
+            payload = cbor2.dumps(twist_dict)
+            overhead = 4
+            total_bytes = len(MQTT_OPTIMISED_COMMAND.encode('utf-8')) + len(payload) + overhead
+            self.metrics.update_bandwidth("movement", total_bytes)
 
     def odom_turning_callback(self, odom_msg):
         """
