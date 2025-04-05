@@ -1,54 +1,107 @@
 #!/usr/bin/env python3
 import tkinter as tk
 import json
+import time
 import paho.mqtt.client as mqtt
+import threading
 
 # MQTT connection settings
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
-MQTT_TOPIC = "raw/command"  # Topic for sending raw commands
+MQTT_CMD_TOPIC = "raw/command"      # Topic for sending raw commands
+MQTT_ACK_TOPIC = "robot/command_ack"  # Topic for receiving command acknowledgments
 
 # Global speed variable (adjust as needed)
 speed = 2
 
+# Dictionary to store pending commands with their timestamp for latency calculation
+pending_commands = {}
+
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code", rc)
+    # Subscribe to the acknowledgment topic once connected
+    client.subscribe(MQTT_ACK_TOPIC)
+
+def on_command_ack(client, userdata, msg):
+    """
+    Callback for processing command acknowledgment messages.
+    Expects an acknowledgment message containing:
+      - "command_id": the unique identifier of the original command.
+      - "ack_timestamp": when the command was acknowledged.
+    """
+    try:
+        ack_data = json.loads(msg.payload.decode())
+        command_id = ack_data.get("command_id")
+        ack_timestamp = ack_data.get("ack_timestamp")
+        if command_id in pending_commands:
+            original_timestamp = pending_commands.pop(command_id)
+            latency = ack_timestamp - original_timestamp
+            print(f"End-to-End Command Latency for command {command_id}: {latency:.3f} seconds")
+        else:
+            print("Received ack for unknown command id:", command_id)
+    except Exception as e:
+        print("Error processing acknowledgment:", e)
+
+# Create a persistent MQTT client for both publishing and subscribing
+mqtt_client = mqtt.Client()
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_command_ack
+
+def mqtt_loop():
+    mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    mqtt_client.loop_forever()
+
+# Start the MQTT client loop in a separate thread
+mqtt_thread = threading.Thread(target=mqtt_loop)
+mqtt_thread.daemon = True
+mqtt_thread.start()
+
 def publish_command(command_data):
     """
-    Publishes the given command_data (a dictionary) to the MQTT topic.
+    Publishes the given command_data (a dictionary) to the MQTT command topic.
     """
-    client = mqtt.Client()
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    client.loop_start()
     payload = json.dumps(command_data)
-    client.publish(MQTT_TOPIC, payload)
+    mqtt_client.publish(MQTT_CMD_TOPIC, payload)
     print("Published command:", command_data)
-    client.loop_stop()
-    client.disconnect()
+
+def send_command(command, extra_fields=None):
+    """
+    Helper function to send a command with a timestamp and unique command_id.
+    Optionally update the message with extra fields (e.g., speed).
+    """
+    current_time = time.time()
+    # Use the current time as a unique command ID (alternatively, use a counter or UUID)
+    command_id = current_time
+    data = {
+        "command": command,
+        "timestamp": current_time,
+        "command_id": command_id
+    }
+    if extra_fields:
+        data.update(extra_fields)
+    # Record the time when the command is sent for latency calculation
+    pending_commands[command_id] = current_time
+    publish_command(data)
 
 def send_go_forward():
     global speed
-    command = {"command": "go_forward", "speed": speed}
-    publish_command(command)
+    send_command("go_forward", {"speed": speed})
 
 def send_go_backwards():
     global speed
-    command = {"command": "go_backwards", "speed": speed}
-    publish_command(command)
+    send_command("go_backwards", {"speed": speed})
 
 def send_stop():
-    command = {"command": "stop"}
-    publish_command(command)
+    send_command("stop")
 
 def send_turn_right():
-    command = {"command": "turn_right_90"}
-    publish_command(command)
+    send_command("turn_right_90")
 
 def send_turn_left():
-    command = {"command": "turn_left_90"}
-    publish_command(command)
+    send_command("turn_left_90")
 
 def send_rotate():
-    command = {"command": "rotate"}
-    publish_command(command)
+    send_command("rotate")
 
 def increase_speed():
     global speed

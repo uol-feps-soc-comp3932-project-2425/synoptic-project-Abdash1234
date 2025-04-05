@@ -100,6 +100,16 @@ class QoSManager:
 
         rospy.loginfo("QoSManager: New QoS set: %d (score: %.3f)", new_qos, score)
         return new_qos
+    
+    def increase_qos(self):
+        """Increase QoS by 1, up to a max of 2."""
+        with self.lock:
+            if self.current_qos < 2:
+                self.current_qos += 1
+                rospy.loginfo("QoS increased to %d", self.current_qos)
+            else:
+                rospy.loginfo("QoS remains at %d", self.current_qos)
+        return self.current_qos
 
     def getQoS(self):
         """

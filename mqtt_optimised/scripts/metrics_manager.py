@@ -9,6 +9,7 @@ import time
 
 class MetricsManager:
     def __init__(self):
+        self.latest_battery_percentage = None 
         # Counters for messages received/published.
         self.throughput_counters = {
             "battery": 0,
@@ -116,13 +117,12 @@ class MetricsManager:
         total_messages = sum(self.message_hash_counts.values())
         if total_messages > 0:
             duplicate_rate = (self.duplicate_count / total_messages) * 100.0
-            print("duplicate rate is: ", duplicate_rate)
-            print("duplicate count is: ", self.duplicate_count)
-            print("total messages is: ", total_messages)
+            # print("duplicate rate is: ", duplicate_rate)
+            # print("duplicate count is: ", self.duplicate_count)
+            # print("total messages is: ", total_messages)
         else:
             duplicate_rate = 0.0
         return self.duplicate_count, duplicate_rate
-
 
     def calc_avg_payload_size(self):
         count = len(self.mqtt_publish_latencies)
@@ -137,9 +137,10 @@ class MetricsManager:
         return mem.percent
 
     def getBatteryLevel(self):
-        # Implement this to update battery level from your battery callback.
-        # For demonstration, return a dummy fraction (0 to 1).
-        return 0.75
+        # Return the current battery level if available; otherwise, use a default value.
+        if self.latest_battery_percentage is not None:
+            return self.latest_battery_percentage
+        return 1.0  # Or some default value (e.g., 100%)
 
     # Logging functions.
     def log_resource_utilization(self, event):

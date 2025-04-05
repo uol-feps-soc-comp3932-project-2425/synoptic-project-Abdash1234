@@ -5,8 +5,11 @@ import cbor2
 import config  # Contains MQTT_BATTERY, etc.
 from sensor_msgs.msg import BatteryState, LaserScan, Imu
 from nav_msgs.msg import Odometry
+import events
 
-def battery_callback(batt_msg, mqtt_handler, metrics):
+latency_threshold = 0.1 # seconds
+
+def battery_callback(batt_msg, mqtt_handler, metrics, aggregator = None, event = None, qos_manager = None):
     """
     Callback for processing BatteryState messages.
     
@@ -30,10 +33,16 @@ def battery_callback(batt_msg, mqtt_handler, metrics):
     # rospy.loginfo("Battery callback latency: %.3f seconds", latency)
     
     # If latency is high, log a warning (or trigger an event if you have an event system)
-    latency_threshold = 0.1
     if latency > latency_threshold:
-        rospy.logwarn("High latency in battery message: %.3f seconds", latency)
+        # print("Latency is:",latency)
+        # print("High latency in battery message: %.3f seconds", latency)
+        event.trigger("high_latency", config.ROS_BATTERY, latency, qos_manager)
         # You might trigger additional actions here (e.g., adjusting QoS)
+    
+    metrics.latest_battery_percentage = batt_msg.percentage
+    if batt_msg.percentage < 0.2:
+        event.trigger("low_battery", config.ROS_BATTERY, batt_msg.percentage)
+    
 
     # Prepare the battery data payload as a dictionary
     battery_data = {
@@ -51,9 +60,18 @@ def battery_callback(batt_msg, mqtt_handler, metrics):
 
     # Serialize the battery data using CBOR
     payload = cbor2.dumps(battery_data)
-
+    
+    # print("Payload is: ", payload)
+    # If battery is low, bypass the aggregator and publish immediately
+    if batt_msg.percentage < 0.2:
+        event.trigger(events.LOW_BATTERY_EVENT, batt_msg.percentage)
+        # rospy.logwarn("Low battery: Publishing immediately instead of aggregating")
+        mqtt_handler.publish(config.MQTT_BATTERY, payload)
+    else:
+        # Normal operation: add to aggregator for time-based batching
+        aggregator.add_message(payload)
     # Publish the serialized payload to the MQTT battery topic
-    mqtt_handler.publish(config.MQTT_BATTERY, payload)
+    # mqtt_handler.publish(config.MQTT_BATTERY, payload)
     # rospy.loginfo("Published battery data to MQTT (result: %s)", result)
 
     # Record finish time and compute processing time
@@ -63,7 +81,7 @@ def battery_callback(batt_msg, mqtt_handler, metrics):
     metrics.processing_records["battery"].append(processing_time)
     metrics.update_bandwidth("battery", len(config.MQTT_ODOM.encode('utf-8')) + len(payload) + 4)
 
-def odom_callback(odom_msg, mqtt_handler, metrics):
+def odom_callback(odom_msg, mqtt_handler, metrics, event = None, qos_manager = None):
     """
     Callback for processing Odometry messages.
     
@@ -83,6 +101,9 @@ def odom_callback(odom_msg, mqtt_handler, metrics):
     current_time = rospy.Time.now().to_sec()
     original_stamp = odom_msg.header.stamp.to_sec()
     latency = current_time - original_stamp
+    if latency > latency_threshold:
+        event.trigger("high_latency", config.ROS_BATTERY, latency, qos_manager)
+
     metrics.record_latency("odom", latency)
     # rospy.loginfo("Odom callback latency: %.3f seconds", latency)
     
@@ -124,7 +145,7 @@ def odom_callback(odom_msg, mqtt_handler, metrics):
     metrics.record_processing_time("odom", processing_time)
     metrics.update_bandwidth("odom", len(config.MQTT_ODOM.encode('utf-8')) + len(payload) + 4)
 
-def scan_callback(scan_msg, mqtt_handler, metrics):
+def scan_callback(scan_msg, mqtt_handler, metrics, event = None, qos_manager = None):
     """
     Process a LaserScan message:
       - Update throughput and record latency.
@@ -136,6 +157,8 @@ def scan_callback(scan_msg, mqtt_handler, metrics):
 
     current_time = rospy.Time.now().to_sec()
     latency = current_time - scan_msg.header.stamp.to_sec()
+    if latency > latency_threshold:
+        event.trigger("high_latency", config.ROS_BATTERY, latency, qos_manager)
     metrics.record_latency("scan", latency)
     # rospy.loginfo("Scan callback latency: %.3f seconds", latency)
 
@@ -162,7 +185,7 @@ def scan_callback(scan_msg, mqtt_handler, metrics):
     metrics.record_processing_time("scan", processing_time)
     metrics.update_bandwidth("scan", len(config.MQTT_SCAN.encode('utf-8')) + len(payload) + 4)
 
-def imu_callback(imu_msg, mqtt_handler, metrics):
+def imu_callback(imu_msg, mqtt_handler, metrics, event = None, qos_manager = None):
     """
     Process an IMU message:
       - Update throughput and record latency.
@@ -174,6 +197,8 @@ def imu_callback(imu_msg, mqtt_handler, metrics):
 
     current_time = rospy.Time.now().to_sec()
     latency = current_time - imu_msg.header.stamp.to_sec()
+    if latency > latency_threshold:
+        event.trigger("high_latency", config.ROS_BATTERY, latency, qos_manager)
     metrics.record_latency("imu", latency)
     # rospy.loginfo("IMU callback latency: %.3f seconds", latency)
 
