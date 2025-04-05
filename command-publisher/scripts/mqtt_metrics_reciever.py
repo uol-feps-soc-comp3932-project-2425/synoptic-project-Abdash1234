@@ -59,6 +59,7 @@ def on_message(client, userdata, msg):
             rospy.logdebug("Decoded message using JSON on topic %s", msg.topic)
     except Exception as e:
         rospy.logerr("Failed to decode message: %s", e)
+        print("test")
         return
 
     if msg.topic in TOPICS:
