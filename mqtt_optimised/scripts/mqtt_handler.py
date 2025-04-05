@@ -9,12 +9,19 @@ class MQTTHandler:
     def __init__(self, broker=MQTT_BROKER, port=MQTT_PORT, topics=None, movement_controller=None, metrics=None, qos = None):
         self.broker = broker
         self.port = port
-        self.topics = topics  # A dict of topics to subscribe/publish to
-        self.movement_controller = movement_controller  # Dependency injection of movement controller
+        self.topics = topics  # A dict of topics to subscribe/publish to.
+        self.movement_controller = movement_controller
         self.metrics = metrics
         self.qos_manager = qos
         self.client = mqtt.Client()
         self._setup_callbacks()
+        
+        # Initialize sequence_numbers for publish topics.
+        # Assuming self.topics["publish"] is a list of topics you'll publish to.
+        if topics and "publish" in topics:
+            self.sequence_numbers = {topic: 0 for topic in topics["publish"]}
+        else:
+            self.sequence_numbers = {}
     
     def _setup_callbacks(self):
         self.client.on_connect = self.on_connect
@@ -58,32 +65,47 @@ class MQTTHandler:
         self.client.connect(self.broker, self.port, 60)
         self.client.loop_start()
 
-    def publish(self, topic, payload, qos=None):
-        # If no QoS value is provided, get it from the qos_manager if available.
+    def publish(self, topic, payload, qos=None, add_publish_time=True, add_sequence=True):
+        # Decode payload into a dictionary.
+        try:
+            data = cbor2.loads(payload)
+            if not isinstance(data, dict):
+                data = {"payload": data}
+        except Exception as e:
+            rospy.logwarn("Failed to decode payload: %s. Wrapping raw payload.", e)
+            data = {"payload": payload}
+
+        # Inject publish_time if needed.
+        if add_publish_time:
+            data["publish_time"] = rospy.Time.now().to_sec()
+
+        # Inject sequence number if needed.
+        if add_sequence:
+            seq = self.sequence_numbers.get(topic, 0)
+            data["seq"] = seq
+            self.sequence_numbers[topic] = seq + 1
+
+        # Serialize the updated data back into payload.
+        payload = cbor2.dumps(data)
+
+        # Determine QoS if not provided.
         if qos is None:
             if self.qos_manager is not None:
                 qos = self.qos_manager.getQoS()
-                # rospy.loginfo("Using dynamic QoS from qos_manager: %s", qos)
             else:
                 qos = 0
                 rospy.loginfo("No qos_manager available; defaulting QoS to 0")
         
-        # Ensure qos is a valid integer (should be between 0 and 2).
-        if qos is None:
-            rospy.logerr("QoS value is still None! Forcing default QoS 0.")
-            qos = 0
-
-        # Now call publish with a valid qos.
+        # Publish the message.
         result = self.client.publish(topic, payload, qos=qos)
         
         if result.rc == mqtt.MQTT_ERR_SUCCESS and self.metrics:
-            # Record the publish timestamp for latency calculation.
             self.metrics.publish_timestamps[result.mid] = rospy.Time.now().to_sec()
-            # Estimate the total size of the MQTT message.
-            overhead = 4  # Estimated constant overhead (adjust if needed).
+            overhead = 4
             total_bytes = len(topic.encode('utf-8')) + len(payload) + overhead
             self.metrics.mqtt_total_bytes += total_bytes
         return result
+
 
     
     def on_publish(self, client, userdata, mid):

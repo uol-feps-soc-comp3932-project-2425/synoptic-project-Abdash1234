@@ -60,7 +60,7 @@ def main():
     rospy.Subscriber(config.ROS_ODOM, Odometry, lambda msg: odom_callback(msg, mqtt_handler, metrics, event = event_manager, qos_manager = qos_manager))
     rospy.Subscriber(config.ROS_SCAN, LaserScan, lambda msg: scan_callback(msg, mqtt_handler, metrics, event = event_manager, qos_manager = qos_manager))
     rospy.Subscriber(config.ROS_IMU, Imu, lambda msg: imu_callback(msg, mqtt_handler, metrics, event = event_manager, qos_manager = qos_manager))
-    rospy.Subscriber(config.ROS_ODOM, Odometry, lambda msg: movement_controller.odom_turning_callback(msg, event = event_manager, qos_manager = qos_manager))
+    rospy.Subscriber(config.ROS_ODOM, Odometry, lambda msg: movement_controller.odom_turning_callback(msg))
 
     
 

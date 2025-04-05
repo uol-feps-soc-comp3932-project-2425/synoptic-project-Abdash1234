@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import json, rospy
+import time
 import paho.mqtt.client as mqtt
 from sensor_msgs.msg import BatteryState, Imu, LaserScan
 from nav_msgs.msg import Odometry
-import statistics, hashlib, psutil
+import statistics, hashlib, psutil, math, tf, cbor2
+from geometry_msgs.msg import Twist 
 
 # MQTT settings
 MQTT_BROKER = "localhost"
@@ -15,12 +17,19 @@ MQTT_IMU     = "robot/imu"
 MQTT_LATENCY = "robot/latency"
 MQTT_THROUGHPUT = "robot/throughput"
 MQTT_DATA = "robot/data"
+MQTT_OPTIMISED_COMMAND = "optimised/command"
+MQTT_RAW_COMMAND = "raw/command"
+
 
 latest_battery_percentage = None
 overall_mean_latency = None
 overall_processing_stdev = None
 overall_error_rate = None
 overall_bandwidth_usage = None
+
+turning = False
+initial_theta = None
+current_turn_threshold = None  # In radians
 
 
 # Global throughput counters (messages counted per topic)
@@ -72,8 +81,12 @@ mqtt_overall_bytes = 0
 duplicate_count = 0
 message_hash_counts = {}
 
+command_seq = 0
+
 # MQTT callback for incoming messages (if needed)
 def on_mqtt_message(client, userdata, msg):
+    if msg.topic == MQTT_RAW_COMMAND:
+        readMessage(msg)
     # Compute hash for the incoming message payload
     global duplicate_count
     payload_hash = hashlib.sha256(msg.payload).hexdigest()
@@ -85,6 +98,89 @@ def on_mqtt_message(client, userdata, msg):
     else:
         message_hash_counts[payload_hash] = 1
     rospy.loginfo("Received MQTT message on topic %s: %s", msg.topic, msg.payload.decode())
+
+def readMessage(msg):
+    global mqtt_client, turning, initial_theta, current_turn_threshold, cmd_pub, command_seq
+    print("in read message")
+    try:
+        # Decode the incoming JSON message
+        command_data = json.loads(msg.payload.decode('utf-8'))
+        rospy.loginfo("Received raw command: %s", command_data)
+        
+        # Read the speed from the command data; default to 2 if not provided.
+        speed_val = command_data.get("speed", 2)
+        
+        # Convert the command into a ROS Twist message based on the command type
+        twist = Twist()
+        cmd = command_data.get("command", "")
+        
+        if cmd == "go_forward":
+            twist.linear.x = speed_val  # Use speed_val
+            twist.angular.z = 0.0
+            rospy.loginfo("Executing go_forward command with speed: %s", speed_val)
+        elif cmd == "go_backwards":
+            twist.linear.x = -speed_val  # Use -speed_val for backwards motion
+            twist.angular.z = 0.0
+            rospy.loginfo("Executing go_backwards command with speed: %s", speed_val)
+        elif cmd == "stop":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.0
+            rospy.loginfo("Executing stop command")
+            # Cancel any turning state
+            turning = False
+            initial_theta = None
+            current_turn_threshold = None
+        elif cmd == "turn_right_90":
+            twist.linear.x = 0.0
+            twist.angular.z = -0.5  # Negative angular for right turn
+            current_turn_threshold = math.pi / 2  # 90 degrees
+            turning = True
+            initial_theta = None  # Will be set in the odom_turning callback
+            rospy.loginfo("Executing turn_right_90 command")
+        elif cmd == "turn_left_90":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.5   # Positive angular for left turn
+            current_turn_threshold = math.pi / 2  # 90 degrees
+            turning = True
+            initial_theta = None
+            rospy.loginfo("Executing turn_left_90 command")
+        elif cmd == "rotate":
+            twist.linear.x = 0.0
+            twist.angular.z = 0.5   # Adjust as needed (could be negative for right turn)
+            current_turn_threshold = math.pi  # 180 degrees
+            turning = True
+            initial_theta = None
+            rospy.loginfo("Executing rotate command")
+        else:
+            rospy.logwarn("Unknown command received: %s", cmd)
+        
+        # Convert the Twist message to a dictionary for MQTT transmission
+        twist_dict = {
+            "linear": {
+                "x": twist.linear.x,
+                "y": twist.linear.y,
+                "z": twist.linear.z
+            },
+            "angular": {
+                "x": twist.angular.x,
+                "y": twist.angular.y,
+                "z": twist.angular.z
+            }
+        }
+        
+        # Add timestamp and sequence number to the payload.
+        current_time = time.time()  # Current processing time
+        command_seq += 1           # Increment the global sequence counter
+        twist_dict["timestamp"] = current_time
+        twist_dict["seq"] = command_seq
+        
+        # Serialize the dictionary using CBOR and publish to the MQTT optimized command topic
+        payload = json.dumps(twist_dict)
+        mqttPublish(MQTT_OPTIMISED_COMMAND, payload, "command")
+        rospy.loginfo("Published optimised command to MQTT: %s", twist_dict)
+        
+    except Exception as e:
+        rospy.logerr("Error processing command: %s", e)
 
 
 def on_publish(client, userdata, mid):
@@ -279,6 +375,36 @@ def odom_callback(odom_msg):
     finish_time = rospy.Time.now().to_sec()
     calcProcessingTime(start_time, finish_time, "odom")
 
+def odom_turning_callback(odom_msg):
+    global turning, initial_theta, current_turn_threshold, cmd_pub
+    if not turning:
+        return  # Not in turning mode; do nothing.
+    
+    # Extract current orientation (yaw) from the odometry message
+    q = odom_msg.pose.pose.orientation
+    # Use tf to convert quaternion to Euler angles; we only need yaw.
+    (_, _, current_theta) = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+    
+    if initial_theta is None:
+        # Record the initial orientation when the turn starts.
+        initial_theta = current_theta
+        rospy.loginfo("Recorded initial orientation: %.3f radians", initial_theta)
+    else:
+        # Check if the robot has turned the required angle.
+        if has_turned(initial_theta, current_theta, current_turn_threshold):
+            rospy.loginfo("Turn complete: initial=%.3f, current=%.3f (threshold=%.3f)", 
+                          initial_theta, current_theta, current_turn_threshold)
+            # Publish a stop command to halt turning.
+            stop_twist = Twist()
+            stop_twist.linear.x = 0.0
+            stop_twist.angular.z = 0.0
+            cmd_pub.publish(stop_twist)
+            # Reset turning state.
+            turning = False
+            initial_theta = None
+            current_turn_threshold = None
+
+
 # Callback for LaserScan messages
 def scan_callback(scan_msg):
     
@@ -408,18 +534,46 @@ def calcProcessingTime(startTime, endTime, source):
     processing_time = endTime - startTime
     processing_records[source].append(processing_time)
 
-def mqttPublish(destination, msg, source=False):
+# Global dictionary for sequence numbers per destination/topic.
+sequence_numbers = {}
+
+def mqttPublish(destination, msg, source=False, add_publish_time=True, add_sequence=True):
+    global mqtt_total_bytes, mqtt_errors, sequence_numbers, publish_timestamps
     try:
+        # Decode payload into a dictionary.
+        try:
+            data = json.loads(msg)
+            if not isinstance(data, dict):
+                data = {"payload": data}
+        except Exception as e:
+            rospy.logwarn("Failed to decode payload: %s. Wrapping raw payload.", e)
+            data = {"payload": msg}
+        
+        # Inject publish_time if needed.
+        if add_publish_time:
+            data["publish_time"] = rospy.Time.now().to_sec()
+        
+        # Inject sequence number if needed.
+        if add_sequence:
+            seq = sequence_numbers.get(destination, 0)
+            data["seq"] = seq
+            sequence_numbers[destination] = seq + 1
+        
+        # Serialize the updated data back into msg.
+        msg = json.dumps(data)
+        
+        # Publish the message.
         result, mid = mqtt_client.publish(destination, msg)
         publish_timestamps[mid] = rospy.Time.now().to_sec()
-        # Also update bandwidth counter (see next section)
-        global mqtt_total_bytes
+        
+        # Update bandwidth counter.
         mqtt_total_bytes += len(msg)
+        
+        return result, mid
     except Exception as e:
         rospy.logerr("Error publishing to topic %s: %s", destination, e)
-        # Record error for MQTT-specific metrics
-        global mqtt_errors
         mqtt_errors += 1
+
 
 def helper(source,payload,latency,msg):
     
@@ -569,7 +723,6 @@ def log_battery_metrics(event):
     throughput_counters["battery"] = 0
     bandwidth_counters["battery"] = 0
 
-
 def mqtt_bridge_node():
     rospy.init_node('mqtt_bridge', anonymous=True)
     # Subscribe to each ROS topic with its corresponding callback
@@ -577,16 +730,28 @@ def mqtt_bridge_node():
     rospy.Subscriber("/odom", Odometry, odom_callback)
     rospy.Subscriber("/scan", LaserScan, scan_callback)
     rospy.Subscriber("/imu", Imu, imu_callback)
+    rospy.Subscriber("/odom", Odometry, odom_turning_callback)
+
 
     # rospy.Timer(rospy.Duration(5.0), log_metrics)
-    rospy.Timer(rospy.Duration(5.0), log_mqtt_overall_metrics)
-    rospy.Timer(rospy.Duration(5.0), lambda event: log_resource_utilization(event))
+    # rospy.Timer(rospy.Duration(5.0), log_mqtt_overall_metrics)
+    # rospy.Timer(rospy.Duration(5.0), lambda event: log_resource_utilization(event))
     # rospy.Timer(rospy.Duration(6.0), log_battery_metrics)
     
     rospy.loginfo("MQTT Bridge node started. Bridging ROS topics to MQTT topics.")
     mqtt_client.loop_start()
+    mqtt_client.subscribe(MQTT_RAW_COMMAND, 0)
     rospy.spin()
     mqtt_client.loop_stop()
+
+def has_turned(initial, current, threshold):
+    """
+    Normalize the angular difference to [-pi, pi] and return True if
+    the absolute difference is greater than or equal to threshold.
+    """
+    diff = current - initial
+    diff = (diff + math.pi) % (2 * math.pi) - math.pi
+    return abs(diff) >= threshold
 
 if __name__ == '__main__':
     try:

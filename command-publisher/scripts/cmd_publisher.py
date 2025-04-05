@@ -17,18 +17,14 @@ speed = 2
 # Dictionary to store pending commands with their timestamp for latency calculation
 pending_commands = {}
 
+command_sequence = 0
+
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code", rc)
     # Subscribe to the acknowledgment topic once connected
     client.subscribe(MQTT_ACK_TOPIC)
 
 def on_command_ack(client, userdata, msg):
-    """
-    Callback for processing command acknowledgment messages.
-    Expects an acknowledgment message containing:
-      - "command_id": the unique identifier of the original command.
-      - "ack_timestamp": when the command was acknowledged.
-    """
     try:
         ack_data = json.loads(msg.payload.decode())
         command_id = ack_data.get("command_id")
@@ -57,29 +53,24 @@ mqtt_thread.daemon = True
 mqtt_thread.start()
 
 def publish_command(command_data):
-    """
-    Publishes the given command_data (a dictionary) to the MQTT command topic.
-    """
     payload = json.dumps(command_data)
     mqtt_client.publish(MQTT_CMD_TOPIC, payload)
     print("Published command:", command_data)
 
 def send_command(command, extra_fields=None):
-    """
-    Helper function to send a command with a timestamp and unique command_id.
-    Optionally update the message with extra fields (e.g., speed).
-    """
+    global command_sequence
+    command_sequence += 1 
     current_time = time.time()
-    # Use the current time as a unique command ID (alternatively, use a counter or UUID)
+    # Use current_time as a unique command ID
     command_id = current_time
     data = {
         "command": command,
         "timestamp": current_time,
-        "command_id": command_id
+        "command_id": command_id,
+        "seq": command_sequence
     }
     if extra_fields:
         data.update(extra_fields)
-    # Record the time when the command is sent for latency calculation
     pending_commands[command_id] = current_time
     publish_command(data)
 
@@ -114,6 +105,7 @@ def decrease_speed():
         speed -= 1
     speed_label.config(text=f"Speed: {speed}")
 
+
 def main():
     global speed_label, speed
     root = tk.Tk()
@@ -139,6 +131,7 @@ def main():
     tk.Button(root, text="Turn Right 90°", command=send_turn_right, width=20).pack(pady=5)
     tk.Button(root, text="Turn Left 90°", command=send_turn_left, width=20).pack(pady=5)
     tk.Button(root, text="Rotate 180°", command=send_rotate, width=20).pack(pady=5)
+
 
     root.mainloop()
 

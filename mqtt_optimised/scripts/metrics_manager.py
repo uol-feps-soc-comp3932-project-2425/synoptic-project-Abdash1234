@@ -184,7 +184,7 @@ class MetricsManager:
         self.duplicate_count = 0
 
     def start_timers(self):
-        rospy.Timer(rospy.Duration(5.0), self.log_overall_metrics)
+        # rospy.Timer(rospy.Duration(5.0), self.log_overall_metrics)
         rospy.Timer(rospy.Duration(5.0), self.log_resource_utilization)
 
 # For convenience, if you want to use a global instance:

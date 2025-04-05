@@ -1,14 +1,14 @@
-# movement_controller.py
 #!/usr/bin/env python3
 import math
 import rospy
 import tf
 import cbor2
+import time
 from geometry_msgs.msg import Twist
 from config import MQTT_OPTIMISED_COMMAND
 
 class MovementController:
-    def __init__(self, mqtt_handler, metrics = None):
+    def __init__(self, mqtt_handler, metrics=None):
         self.mqtt_handler = mqtt_handler  # Save the MQTT handler instance.
         self.metrics = metrics            # Optional: MetricsManager instance.
         # State variables for turning.
@@ -22,10 +22,18 @@ class MovementController:
         a corresponding Twist command via MQTT. Also update movement metrics.
         """
         start_time = rospy.Time.now().to_sec()
+        
+        # Check for a timestamp in the command_data to measure end-to-end latency.
+        timestamp = command_data.get("timestamp")
+        # Extract the sequence number from the command.
+        seq = command_data.get("seq")
+        if timestamp:
+            cmd_latency = start_time - timestamp
+            rospy.loginfo("End-to-End Command Latency (MovementController): %.3f seconds", cmd_latency)
+            # Optionally update a metric here if using a MetricsManager.
+
         # If metrics is available, update throughput for movement commands.
         if self.metrics:
-            # Optionally add a new key "movement" in your metrics manager
-            # If not present, you could use a default (or add the key on the fly).
             if "movement" not in self.metrics.throughput_counters:
                 self.metrics.throughput_counters["movement"] = 0
             self.metrics.update_throughput("movement", 1)
@@ -39,17 +47,17 @@ class MovementController:
             twist.linear.x = speed_val
             twist.angular.z = 0.0
             rospy.loginfo("Executing go_forward command with speed: %s", speed_val)
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
         elif cmd == "go_backwards":
             twist.linear.x = -speed_val
             twist.angular.z = 0.0
             rospy.loginfo("Executing go_backwards command with speed: %s", speed_val)
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
         elif cmd == "stop":
             twist.linear.x = 0.0
             twist.angular.z = 0.0
             rospy.loginfo("Executing stop command")
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
             self.turning = False
             self.initial_theta = None
             self.current_turn_threshold = None
@@ -60,7 +68,7 @@ class MovementController:
             self.turning = True
             self.initial_theta = None  # Will be set in odom_turning_callback.
             rospy.loginfo("Executing turn_right_90 command")
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
         elif cmd == "turn_left_90":
             twist.linear.x = 0.0
             twist.angular.z = 0.5   # Positive angular for left turn.
@@ -68,7 +76,7 @@ class MovementController:
             self.turning = True
             self.initial_theta = None
             rospy.loginfo("Executing turn_left_90 command")
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
         elif cmd == "rotate":
             twist.linear.x = 0.0
             twist.angular.z = 0.5   # Adjust as needed for rotation.
@@ -76,7 +84,7 @@ class MovementController:
             self.turning = True
             self.initial_theta = None
             rospy.loginfo("Executing rotate command")
-            self.publish_twist(twist)
+            self.publish_twist(twist, timestamp, seq)
         else:
             rospy.logwarn("Unknown movement command received: %s", cmd)
 
@@ -85,12 +93,16 @@ class MovementController:
         rospy.loginfo("MovementController: Processing time: %.3f seconds", processing_time)
         if self.metrics:
             self.metrics.record_processing_time("movement", processing_time)
-            # Optionally update bandwidth for movement command if desired.
-            # You can estimate the size similar to your other publish methods.
+            # Optionally update bandwidth for movement command.
             twist_dict = {
                 "linear": {"x": twist.linear.x, "y": twist.linear.y, "z": twist.linear.z},
                 "angular": {"x": twist.angular.x, "y": twist.angular.y, "z": twist.angular.z}
             }
+            # Include the timestamp and sequence number in the payload if available.
+            if timestamp:
+                twist_dict["timestamp"] = timestamp
+            if seq is not None:
+                twist_dict["seq"] = seq
             payload = cbor2.dumps(twist_dict)
             overhead = 4
             total_bytes = len(MQTT_OPTIMISED_COMMAND.encode('utf-8')) + len(payload) + overhead
@@ -128,7 +140,12 @@ class MovementController:
         diff = (diff + math.pi) % (2 * math.pi) - math.pi
         return abs(diff) >= threshold
 
-    def publish_twist(self, twist):
+    def publish_twist(self, twist, timestamp=None, seq=None):
+        """
+        Publish a Twist command over MQTT.
+        If a timestamp is provided, include it in the published payload.
+        If a sequence number is provided, include it as well.
+        """
         twist_dict = {
             "linear": {
                 "x": twist.linear.x,
@@ -141,5 +158,9 @@ class MovementController:
                 "z": twist.angular.z
             }
         }
+        if timestamp:
+            twist_dict["timestamp"] = timestamp
+        if seq is not None:
+            twist_dict["seq"] = seq
         payload = cbor2.dumps(twist_dict)
         self.mqtt_handler.publish(MQTT_OPTIMISED_COMMAND, payload)
