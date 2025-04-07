@@ -1,16 +1,32 @@
 #!/usr/bin/env python3
-import rospy
 import threading
-import time
+import rospy
+import statistics
+import csv
+import os
+
+# Define the CSV file path for logging QoS changes.
+CSV_QOS_LOG_FILE = "/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/csv_files/qos_metrics.csv"
 
 class QoSManager:
-    def __init__(self, metrics_manager):
+    def __init__(self, metrics_manager, smoothing_window=5):
         """
         Initialize with a reference to a MetricsManager instance.
         """
         self.metrics = metrics_manager
         self.current_qos = 0  # Default QoS
+        self.previous_qos = self.current_qos  # To track changes.
         self.lock = threading.Lock()
+        self.smoothing_window = smoothing_window
+        self.score_history = []  # To store recent score values
+        self.lower_threshold = 0.25  # Score must drop below this to decrease QoS.
+        self.upper_threshold = 0.65  # Score must exceed this to increase QoS.
+        
+        # Initialize CSV header if file doesn't exist.
+        if not os.path.exists(CSV_QOS_LOG_FILE) or os.path.getsize(CSV_QOS_LOG_FILE) == 0:
+            with open(CSV_QOS_LOG_FILE, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "new_qos", "smoothed_score", "battery_level", "avg_latency", "bandwidth_usage", "jitter", "error_rate"])
 
     def normaliseLatency(self, latency, minLatency=0.001, maxLatency=0.1):
         """
@@ -73,33 +89,74 @@ class QoSManager:
                  w_jitter  * norm_jitter)
         return score
 
+    def log_qos_change(self, new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate):
+        """
+        Log a QoS change event to a CSV file.
+        """
+        timestamp = rospy.get_time()
+        row = [
+            timestamp,
+            new_qos,
+            smoothed_score,
+            battery_level,
+            avg_latency,
+            bandwidth_usage,
+            jitter,
+            error_rate
+        ]
+        try:
+            with open(CSV_QOS_LOG_FILE, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+            rospy.loginfo("Logged QoS change: QoS %d at %.3f (battery: %.2f, latency: %.3f, bw: %.2f, jitter: %.3f, error: %.2f%%)", 
+                          new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+        except Exception as e:
+            rospy.logerr("Error logging QoS change: %s", e)
+
     def setQoS(self):
         """
-        Read the metrics from the MetricsManager, calculate a score, and decide on a QoS level.
-        QoS 0 for good conditions, QoS 1 for moderate, QoS 2 for poor conditions.
+        Calculate the score from current metrics, smooth it over a window,
+        and update the QoS level only if the smoothed score exceeds hysteresis thresholds.
+        Logs the change when it occurs.
         """
-        # Read metrics from the metrics manager.
         battery_level = self.metrics.getBatteryLevel()
         avg_latency, jitter, _ = self.metrics.calc_mqtt_latency()
         bandwidth_usage, _ = self.metrics.calc_mqtt_bandwidth()
         error_rate, _, _ = self.metrics.calc_mqtt_error_metrics()
 
-        # Calculate a score using normalized metric values.
-        score = self.calcScore(battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
-        
-        # Decide QoS based on the score thresholds.
-        if score < 0.3:
-            new_qos = 0
-        elif score < 0.6:
-            new_qos = 1
-        else:
-            new_qos = 2
+        # Calculate current score.
+        current_score = self.calcScore(battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+        self.score_history.append(current_score)
+        if len(self.score_history) > self.smoothing_window:
+            self.score_history.pop(0)
+        smoothed_score = sum(self.score_history) / len(self.score_history)
 
         with self.lock:
-            self.current_qos = new_qos
+            new_qos = self.current_qos
+            # Hysteresis logic based on current QoS level:
+            if self.current_qos == 0:
+                # If conditions worsen significantly, move to QoS 1.
+                if smoothed_score >= self.upper_threshold:
+                    new_qos = 1
+            elif self.current_qos == 1:
+                # If conditions improve, drop back to QoS 0.
+                if smoothed_score < self.lower_threshold:
+                    new_qos = 0
+                # If conditions worsen further, move to QoS 2.
+                elif smoothed_score >= self.upper_threshold:
+                    new_qos = 2
+            elif self.current_qos == 2:
+                # If conditions improve sufficiently, drop to QoS 1.
+                if smoothed_score < self.upper_threshold:
+                    new_qos = 1
 
-        rospy.loginfo("QoSManager: New QoS set: %d (score: %.3f)", new_qos, score)
-        return new_qos
+            # If the QoS level has changed, log the event.
+            if new_qos != self.current_qos:
+                self.current_qos = new_qos
+                self.log_qos_change(new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+
+        rospy.loginfo("QoSManager: Current QoS is %d (smoothed score: %.3f)", self.current_qos, smoothed_score)
+        return self.current_qos
     
     def increase_qos(self):
         """Increase QoS by 1, up to a max of 2."""
@@ -129,7 +186,6 @@ class QoSManager:
             rate.sleep()
 
 if __name__ == '__main__':
-    # This block allows you to run the QoSManager independently for testing.
     rospy.init_node('qos_manager_node', anonymous=True)
     
     from metrics_manager import MetricsManager

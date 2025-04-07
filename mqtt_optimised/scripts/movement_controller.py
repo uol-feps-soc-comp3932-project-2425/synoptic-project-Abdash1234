@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import math
 import rospy
 import tf
@@ -103,10 +104,12 @@ class MovementController:
                 twist_dict["timestamp"] = timestamp
             if seq is not None:
                 twist_dict["seq"] = seq
+
             payload = cbor2.dumps(twist_dict)
             overhead = 4
             total_bytes = len(MQTT_OPTIMISED_COMMAND.encode('utf-8')) + len(payload) + overhead
             self.metrics.update_bandwidth("movement", total_bytes)
+
 
     def odom_turning_callback(self, odom_msg):
         """

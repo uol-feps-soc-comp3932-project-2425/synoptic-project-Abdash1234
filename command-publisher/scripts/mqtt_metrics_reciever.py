@@ -3,10 +3,13 @@ import rospy
 import paho.mqtt.client as mqtt
 import cbor2
 import json
+import csv, os
 
 # MQTT settings
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
+CSV_FILE = "/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/csv_files/mqtt_metrics.csv"
+
 # Topics to monitor.
 TOPICS = ["robot/odom", "robot/scan", "robot/imu", "robot/battery"]
 
@@ -36,6 +39,64 @@ expected_seq = {topic: None for topic in TOPICS}
 overall_missed_packets = {topic: 0 for topic in TOPICS}
 interval_missed_packets = {topic: 0 for topic in TOPICS}
 
+# Global battery percentage (value between 0 and 1)
+latest_battery_percentage = None
+
+def log_metrics_to_csv(metrics, csv_file=CSV_FILE):
+    """
+    Logs the provided metrics to a CSV file.
+    
+    metrics: A dictionary containing the aggregated metrics.
+             Expected keys: 
+               "overall_latency_ms", "overall_jitter_ms", "throughput_msgs_sec",
+               "avg_payload_bytes", "lost_packets", "error_rate_pct",
+               "processing_time_ms", "bandwidth_bytes_sec", "battery_pct"
+    csv_file: Path to the CSV file.
+    """
+    # Define the CSV header.
+    header = [
+        "timestamp", 
+        "battery_pct", 
+        "overall_latency_ms", 
+        "overall_jitter_ms", 
+        "throughput_msgs_sec", 
+        "avg_payload_bytes", 
+        "lost_packets", 
+        "error_rate_pct", 
+        "processing_time_ms", 
+        "bandwidth_bytes_sec"
+    ]
+    
+    # Check if file exists and is non-empty.
+    file_exists = os.path.exists(csv_file) and os.path.getsize(csv_file) > 0
+    
+    # Get current time (ROS time).
+    current_time = rospy.get_time()
+    
+    # Prepare the row based on the metrics dictionary.
+    row = [
+        current_time,
+        metrics.get("battery_pct", "N/A"),
+        metrics.get("overall_latency_ms", 0),
+        metrics.get("overall_jitter_ms", 0),
+        metrics.get("throughput_msgs_sec", 0),
+        metrics.get("avg_payload_bytes", 0),
+        metrics.get("lost_packets", 0),
+        metrics.get("error_rate_pct", 0),
+        metrics.get("processing_time_ms", 0),
+        metrics.get("bandwidth_bytes_sec", 0)
+    ]
+    
+    try:
+        with open(csv_file, mode="a", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(header)
+            writer.writerow(row)
+        rospy.loginfo("Logged metrics to CSV.")
+    except Exception as e:
+        rospy.logerr("Error writing to CSV: %s", e)
+
 def on_connect(client, userdata, flags, rc):
     rospy.loginfo("Connected to MQTT Broker with result code %s", rc)
     for topic in TOPICS:
@@ -47,6 +108,7 @@ def on_message(client, userdata, msg):
     global overall_throughput_counts, overall_throughput_bytes, interval_throughput_counts, interval_throughput_bytes
     global overall_jitter_sums, overall_jitter_counts, interval_jitter_sums, interval_jitter_counts
     global last_latency, expected_seq, overall_missed_packets, interval_missed_packets
+    global latest_battery_percentage
 
     try:
         # Try to decode using CBOR first.
@@ -54,12 +116,10 @@ def on_message(client, userdata, msg):
             data = cbor2.loads(msg.payload)
             rospy.logdebug("Decoded message using CBOR on topic %s", msg.topic)
         except Exception as e:
-            # rospy.logwarn("CBOR decode failed (%s), trying JSON...", e)
             data = json.loads(msg.payload.decode('utf-8'))
             rospy.logdebug("Decoded message using JSON on topic %s", msg.topic)
     except Exception as e:
         rospy.logerr("Failed to decode message: %s", e)
-        print("test")
         return
 
     if msg.topic in TOPICS:
@@ -70,20 +130,24 @@ def on_message(client, userdata, msg):
         interval_throughput_counts[msg.topic] += 1
         interval_throughput_bytes[msg.topic] += payload_size
 
+        # If the topic is battery, update latest battery percentage.
+        if msg.topic == "robot/battery":
+            battery_pct = data.get("percentage", None)
+            if battery_pct is not None:
+                latest_battery_percentage = battery_pct
+
         # Process sequence number to track lost packets.
         seq = data.get('seq', None)
         if seq is None:
             rospy.logwarn("No sequence number found in message on topic %s", msg.topic)
         else:
             if expected_seq[msg.topic] is None:
-                # First message; set expected sequence to current + 1.
                 expected_seq[msg.topic] = seq + 1
             else:
                 if seq != expected_seq[msg.topic]:
-                    # Calculate number of missed packets (assuming increasing sequence numbers).
                     missed = seq - expected_seq[msg.topic]
                     if missed < 0:
-                        missed = 0  # In case of reordering.
+                        missed = 0
                     overall_missed_packets[msg.topic] += missed
                     interval_missed_packets[msg.topic] += missed
                     rospy.logwarn("Topic %s: missed %d packets (expected %d, got %d)",
@@ -102,20 +166,17 @@ def on_message(client, userdata, msg):
             current_time = rospy.get_time()
             latency = current_time - published_time
 
-            # Update latency accumulators.
             overall_latency_sums[msg.topic] += latency
             overall_msg_counts[msg.topic] += 1
             interval_latency_sums[msg.topic] += latency
             interval_msg_counts[msg.topic] += 1
 
-            # Compute jitter if a previous latency exists.
             if last_latency[msg.topic] is not None:
                 jitter = abs(latency - last_latency[msg.topic])
                 overall_jitter_sums[msg.topic] += jitter
                 overall_jitter_counts[msg.topic] += 1
                 interval_jitter_sums[msg.topic] += jitter
                 interval_jitter_counts[msg.topic] += 1
-            # Update last_latency with the current latency.
             last_latency[msg.topic] = latency
 
         except Exception as e:
@@ -124,12 +185,12 @@ def on_message(client, userdata, msg):
 def timer_callback(event):
     """
     Every 5 seconds, log tidier metrics including latency, throughput, average payload size,
-    jitter, and sequence error metrics for each topic and overall.
+    jitter, sequence error metrics, and battery percentage, and also write these metrics to CSV.
     """
     global interval_latency_sums, interval_msg_counts
     global interval_throughput_counts, interval_throughput_bytes
     global interval_jitter_sums, interval_jitter_counts
-    global interval_missed_packets
+    global interval_missed_packets, latest_battery_percentage
 
     lines = []
     lines.append("----- 5-second Interval Metrics -----")
@@ -149,7 +210,6 @@ def timer_callback(event):
         jitter_count = interval_jitter_counts[topic]
         missed = interval_missed_packets[topic]
 
-        # Per-topic metrics.
         if msg_count > 0:
             avg_latency = interval_latency_sums[topic] / msg_count
         else:
@@ -209,10 +269,32 @@ def timer_callback(event):
     lines.append(f"  Avg Payload Size  : {overall_avg_payload_size:.2f} bytes")
     lines.append(f"  Overall Jitter    : {overall_avg_jitter*1000:.6f} ms (over {total_jitter_count} differences)")
     lines.append(f"  Missed Packets    : {total_missed} (Error Rate: {overall_error_rate:.2f}%)")
+    
+    if latest_battery_percentage is not None:
+        battery_str = f"Battery Percentage: {latest_battery_percentage*100:.2f}%"
+    else:
+        battery_str = "Battery Percentage: N/A"
+    lines.append(battery_str)
+    
     lines.append("----------------------------------------")
-
-    # Log the entire block as one info message.
     rospy.loginfo("\n".join(lines))
+
+    # Prepare metrics dictionary for CSV logging.
+    overall_metrics = {
+        "battery_pct": (latest_battery_percentage * 100) if latest_battery_percentage is not None else "N/A",
+        "overall_latency_ms": overall_avg_latency * 1000,
+        "overall_jitter_ms": overall_avg_jitter * 1000,
+        "throughput_msgs_sec": overall_msgs_per_sec,
+        "avg_payload_bytes": overall_avg_payload_size,
+        "lost_packets": total_missed,
+        "error_rate_pct": overall_error_rate,
+        # If you have an overall processing time metric, include it here.
+        "processing_time_ms": 0,
+        "bandwidth_bytes_sec": overall_bytes_per_sec
+    }
+    
+    # Log metrics to CSV.
+    log_metrics_to_csv(overall_metrics)
 
     # Reset interval accumulators for next interval.
     interval_latency_sums = {topic: 0.0 for topic in TOPICS}
@@ -226,15 +308,11 @@ def timer_callback(event):
 
 def mqtt_subscriber_node():
     rospy.init_node('mqtt_subscriber_node', anonymous=True)
-
-    # Timer fires every 5 seconds.
     rospy.Timer(rospy.Duration(5.0), timer_callback)
-
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
-
     client.loop_start()
     rospy.loginfo("MQTT Subscriber node started. Listening to topics: %s", TOPICS)
     rospy.spin()
