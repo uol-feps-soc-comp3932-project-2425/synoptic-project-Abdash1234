@@ -18,8 +18,10 @@ class MQTTHandler:
         # Assuming self.topics["publish"] is a list of topics you'll publish to.
         if topics and "publish" in topics:
             self.sequence_numbers = {topic: 0 for topic in topics["publish"]}
+            self.published_message_counts = {topic: 0 for topic in topics["publish"]}
         else:
             self.sequence_numbers = {}
+            self.published_message_counts = {}
     
     def _setup_callbacks(self):
         self.client.on_connect = self.on_connect
@@ -74,8 +76,43 @@ class MQTTHandler:
         
         # Publish the message.
         self.client.publish(topic, payload, qos=0)
+        topic = topic.strip()  # Ensure no extra whitespace.
+        if topic not in self.published_message_counts:
+            self.published_message_counts[topic] = 0
+        self.published_message_counts[topic] += 1
 
-
+    def publish_summary(self, qos=2):
+        """
+        Publish a summary message containing the per-topic published message counts,
+        the last sequence number used for each topic, and a timestamp.
+        This is published with QoS 2 for reliability.
+        """
+        rospy.loginfo("Publishing Summary")
+        summary_data = {
+            "timestamp": rospy.Time.now().to_sec(),
+            "topics": {}
+        }
+        
+        # Define which topics we want to include in the summary.
+        allowed_topics = {"robot/battery", "robot/imu", "robot/odom", "robot/scan"}
+        
+        # Build summary for each publish topic if it is in allowed_topics.
+        for topic, count in self.published_message_counts.items():
+            if topic in allowed_topics:
+                last_seq = self.sequence_numbers.get(topic, 0) - 1  # last published sequence number
+                summary_data["topics"][topic] = {
+                    "published_count": count,
+                    "last_sequence": last_seq
+                }
+        payload = json.dumps(summary_data)
+        result = self.client.publish("mqtt/summary", payload, qos=qos)
+        # rospy.loginfo("Published summary: %s", summary_data)
+        # Reset the per-topic counters after publishing the summary.
+        for topic in self.published_message_counts:
+            if topic in allowed_topics:
+                self.published_message_counts[topic] = 0
+        self.published_message_count = 0
+        return result
 
     
     # def on_publish(self, client, userdata, mid):

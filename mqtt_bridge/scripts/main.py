@@ -46,6 +46,12 @@ def main():
 
     print("running bridge")
 
+    def summary_timer_callback(event):
+        rospy.loginfo("Summary timer callback triggered")
+        mqtt_handler.publish_summary(qos=2)
+
+    rospy.Timer(rospy.Duration(5.0), summary_timer_callback)
+
     # Keep the node running until it's shut down
     try:
         rospy.spin()

@@ -72,6 +72,11 @@ def main():
     # you can pass the mqtt_handler instance to them.
     # For example, if you set up your ROS subscribers in another module,
     # you can provide the mqtt_handler to the callback functions.
+    def summary_timer_callback(event):
+        rospy.loginfo("Summary timer callback triggered")
+        mqtt_handler.publish_summary(qos=2)
+
+    rospy.Timer(rospy.Duration(5.0), summary_timer_callback)
     rospy.on_shutdown(lambda: shutdown_cleanup(battery_aggregator))
 
     # Keep the node running until it's shut down
@@ -81,6 +86,8 @@ def main():
         rospy.loginfo("Shutting down MQTT Bridge Node")
     finally:
         mqtt_handler.disconnect()
+
+
 
 
 def shutdown_cleanup(battery_aggregator):

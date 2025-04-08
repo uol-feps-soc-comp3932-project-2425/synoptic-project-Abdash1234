@@ -38,6 +38,9 @@ def battery_callback(batt_msg, mqtt_handler, metrics, aggregator = None, event =
         # You might trigger additional actions here (e.g., adjusting QoS)
     
     metrics.latest_battery_percentage = batt_msg.percentage
+    battery_payload = cbor2.dumps({"percentage": batt_msg.percentage})
+    mqtt_handler.publish("robot/battery_status", battery_payload)
+
     if batt_msg.percentage < 0.2 and event is not None:
         event.trigger("low_battery", config.ROS_BATTERY, batt_msg.percentage)
     

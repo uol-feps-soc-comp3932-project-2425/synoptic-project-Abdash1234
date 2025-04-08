@@ -7,6 +7,10 @@ from nav_msgs.msg import Odometry
 
 def battery_callback(batt_msg, mqtt_handler):
     # Prepare the battery data payload as a dictionary
+
+    battery_payload = json.dumps({"percentage": batt_msg.percentage})
+    mqtt_handler.publish("robot/battery_status", battery_payload)
+    
     battery_data = {
         "header": {
             "frame_id": batt_msg.header.frame_id,
