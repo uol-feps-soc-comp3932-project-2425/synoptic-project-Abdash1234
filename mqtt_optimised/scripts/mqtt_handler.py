@@ -118,7 +118,7 @@ class MQTTHandler:
         the last sequence number used for each topic, and a timestamp.
         This is published with QoS 2 for reliability.
         """
-        rospy.loginfo("Publishing Summary")
+        # rospy.loginfo("Publishing Summary")
         summary_data = {
             "timestamp": rospy.Time.now().to_sec(),
             "topics": {}
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     mqtt_handler.connect()
     
     def summary_timer_callback(event):
-        rospy.loginfo("Summary timer callback triggered")
+        # rospy.loginfo("Summary timer callback triggered")
         mqtt_handler.publish_summary(qos=2)
     
     rospy.Timer(rospy.Duration(5.0), summary_timer_callback)

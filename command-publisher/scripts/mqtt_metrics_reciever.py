@@ -9,6 +9,7 @@ import csv, os
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
 CSV_FILE = "/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/csv_files/mqtt_metrics.csv"
+client = mqtt.Client()
 
 # Topics to monitor.
 # "robot/battery_status" is used exclusively for battery percentage;
@@ -310,13 +311,15 @@ def timer_callback(event):
         "overall_jitter_ms": overall_avg_jitter * 1000,
         "throughput_msgs_sec": overall_msgs_per_sec,
         "avg_payload_bytes": overall_avg_payload_size,
-        "lost_packets": overall_error_rate,  # Overall error rate as a percent.
+        "lost_packets": total_lost,        # Now store the raw lost packet count.
         "error_rate_pct": overall_error_rate,
-        "processing_time_ms": 0,  # Set to 0 or update if tracking overall processing time.
+        "processing_time_ms": 0,
         "bandwidth_bytes_sec": overall_bytes_per_sec
-    }
-    
+    }   
+
     log_metrics_to_csv(overall_metrics)
+    client.publish("mqtt/summary-metrics", json.dumps(overall_metrics))
+    
     print(overall_metrics)
 
     # Reset interval accumulators for next interval.
@@ -338,7 +341,6 @@ def timer_callback(event):
 def mqtt_subscriber_node():
     rospy.init_node('mqtt_subscriber_node', anonymous=True)
     rospy.Timer(rospy.Duration(5.0), timer_callback)
-    client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect(MQTT_BROKER, MQTT_PORT, 60)

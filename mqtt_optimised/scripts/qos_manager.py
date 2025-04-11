@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import threading
 import rospy
-import statistics
+import paho.mqtt.client as mqtt
+import json
 import csv
 import os
+from config import MQTT_BROKER, MQTT_PORT
 
 # Define the CSV file path for logging QoS changes.
 CSV_QOS_LOG_FILE = "/home/abdullah/catkin_ws/src/synoptic-project-Abdash1234/csv_files/qos_metrics.csv"
@@ -21,12 +23,56 @@ class QoSManager:
         self.score_history = []  # To store recent score values
         self.lower_threshold = 0.25  # Score must drop below this to decrease QoS.
         self.upper_threshold = 0.65  # Score must exceed this to increase QoS.
+
+        self.command_loss_threshold = 0.5
+        self.metrics_loss_threshold = 0.75
+        self.latest_loss_pct = 0.0
+        self.latest_loss_pct_metrics = 0.0
+
+        # Set up an MQTT client to subscribe to the summary topic.
+        self.client = mqtt.Client()
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+
+        self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        self.client.loop_start()  # Start the loop to listen for summary messages
         
         # Initialize CSV header if file doesn't exist.
         if not os.path.exists(CSV_QOS_LOG_FILE) or os.path.getsize(CSV_QOS_LOG_FILE) == 0:
             with open(CSV_QOS_LOG_FILE, mode='w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["timestamp", "new_qos", "smoothed_score", "battery_level", "avg_latency", "bandwidth_usage", "jitter", "error_rate"])
+
+    def on_connect(self, client, userdata, flags, rc):
+            rospy.loginfo("QoSManager connected to MQTT Broker with result code: %s", rc)
+            client.subscribe("robot/command_ack")
+            client.subscribe("mqtt/summary-metrics")
+
+
+    def on_message(self, client, userdata, msg):
+        try:
+            # Check the topic of the incoming message.
+            if msg.topic == "robot/command_ack":
+                # Attempt to decode the summary message as JSON.
+                summary_data = json.loads(msg.payload.decode('utf-8'))
+                # For example, assume the summary message has a key "loss_pct"
+                self.latest_loss_pct = summary_data.get("loss_pct", 0.0)
+                # print("message recieved", self.latest_loss_pct)
+                # Adjust QoS based on the latest loss percentage.
+                self.adjust_qos()
+            elif msg.topic == "mqtt/summary-metrics":
+                # Process the summary metrics message.
+                summary_data = json.loads(msg.payload.decode('utf-8'))
+                self.latest_loss_pct_metrics = summary_data.get("error_rate_pct", 0.0)
+                # rospy.loginfo("Received summary metrics: %s", summary_data)
+                print("this is the latest loss metric",self.latest_loss_pct_metrics)
+        except Exception as e:
+            rospy.logerr("Error processing summary message: %s", e)
+
+    def shutdown(self):
+        self.client.loop_stop()
+        self.client.disconnect()
+
 
     def normaliseLatency(self, latency, minLatency=0.001, maxLatency=0.1):
         """
@@ -61,7 +107,7 @@ class QoSManager:
         else:
             return (jitter - minJitter) / (maxJitter - minJitter)
 
-    def calcScore(self, battery_level, latency, bandwidth, jitter, error_rate):
+    def calcScore(self, battery_level, latency, bandwidth, jitter):
         """
         Calculate a weighted score based on the input metrics.
         Lower score means conditions are good, higher score indicates worse conditions.
@@ -73,18 +119,15 @@ class QoSManager:
         norm_latency = self.normaliseLatency(latency)
         norm_bandwidth = self.normaliseBandwidth(bandwidth)
         norm_jitter = self.normaliseJitter(jitter)
-        norm_error_rate = error_rate / 100.0  # Convert percentage to fraction
 
         # Weights for each metric; adjust these based on your system's requirements.
-        w_battery = 0.3
-        w_latency = 0.35
-        w_error   = 0.2
-        w_bw      = 0.1
-        w_jitter  = 0.05
+        w_battery = 0.2
+        w_latency = 0.30
+        w_bw      = 0.35
+        w_jitter  = 0.15
 
         score = (w_battery * norm_battery +
                  w_latency * norm_latency +
-                 w_error   * norm_error_rate +
                  w_bw      * norm_bandwidth +
                  w_jitter  * norm_jitter)
         return score
@@ -108,8 +151,7 @@ class QoSManager:
             with open(CSV_QOS_LOG_FILE, mode='a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(row)
-            rospy.loginfo("Logged QoS change: QoS %d at %.3f (battery: %.2f, latency: %.3f, bw: %.2f, jitter: %.3f, error: %.2f%%)", 
-                          new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+            # rospy.loginfo("Logged QoS change: QoS %d at %.3f (battery: %.2f, latency: %.3f, bw: %.2f, jitter: %.3f, error: %.2f%%)", new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
         except Exception as e:
             rospy.logerr("Error logging QoS change: %s", e)
 
@@ -119,17 +161,33 @@ class QoSManager:
         and update the QoS level only if the smoothed score exceeds hysteresis thresholds.
         Logs the change when it occurs.
         """
+        self.current_qos = 0
         battery_level = self.metrics.getBatteryLevel()
         avg_latency, jitter, _ = self.metrics.calc_mqtt_latency()
         bandwidth_usage, _ = self.metrics.calc_mqtt_bandwidth()
-        error_rate, _, _ = self.metrics.calc_mqtt_error_metrics()
+        error_rate = 0
+        if self.latest_loss_pct_metrics > self.latest_loss_pct:
+            error_rate = self.latest_loss_pct_metrics
+        else:
+            error_rate = self.latest_loss_pct
 
         # Calculate current score.
-        current_score = self.calcScore(battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+        current_score = self.calcScore(battery_level, avg_latency, bandwidth_usage, jitter)
         self.score_history.append(current_score)
         if len(self.score_history) > self.smoothing_window:
             self.score_history.pop(0)
         smoothed_score = sum(self.score_history) / len(self.score_history)
+
+        if self.latest_loss_pct > self.command_loss_threshold:
+            print("Command Loss threshold exceed: QoS -> Lvl 2")
+            self.current_qos = 2
+            self.log_qos_change(2, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+            return
+        if self.latest_loss_pct_metrics > self.metrics_loss_threshold:
+            print("Metrics Loss threshold exceed: QoS -> Lvl 2")
+            self.current_qos = 2
+            self.log_qos_change(2, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
+            return
 
         with self.lock:
             new_qos = self.current_qos
@@ -152,6 +210,8 @@ class QoSManager:
 
             # If the QoS level has changed, log the event.
             if new_qos != self.current_qos:
+                print("Old QoS: ", self.current_qos)
+                print("New QoS: ", new_qos)
                 self.current_qos = new_qos
                 self.log_qos_change(new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate)
 
@@ -163,9 +223,7 @@ class QoSManager:
         with self.lock:
             if self.current_qos < 2:
                 self.current_qos += 1
-                rospy.loginfo("QoS increased to %d", self.current_qos)
-            else:
-                rospy.loginfo("QoS remains at %d", self.current_qos)
+                # rospy.loginfo("QoS increased to %d", self.current_qos)
         return self.current_qos
 
     def getQoS(self):
@@ -186,9 +244,11 @@ class QoSManager:
             rate.sleep()
 
 if __name__ == '__main__':
-    rospy.init_node('qos_manager_node', anonymous=True)
-    
-    from metrics_manager import MetricsManager
-    metrics = MetricsManager()
-    qos_manager = QoSManager(metrics)
-    qos_manager.start()
+    # print("Starting QoSManager...")
+    qos_manager = QoSManager(loss_threshold=5.0)
+    try:
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
+    finally:
+        qos_manager.shutdown()

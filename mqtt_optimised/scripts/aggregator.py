@@ -20,7 +20,7 @@ class Aggregator:
         # print("Aggregator for topic '%s' started with flush_interval=%.2fs", self.topic, self.flush_interval)
 
     def _timer_callback(self, event):
-        print("Aggregator timer callback triggered")
+        # print("Aggregator timer callback triggered")
         self.flush()
 
     def add_message(self, payload):
@@ -42,7 +42,7 @@ class Aggregator:
             aggregated_payload = cbor2.dumps(self.buffer)
             # print("Publishing aggregated message on topic '%s' with %d messages", self.topic, len(self.buffer))
             # print("Publishing aggregated payload:", aggregated_payload)
-            print("This is the length of the payload: %d", len(self.buffer))
+            # print("This is the length of the payload: %d", len(self.buffer))
             self.mqtt_handler.publish(self.topic, aggregated_payload)
             self.buffer.clear()
 
