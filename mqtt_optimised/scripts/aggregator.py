@@ -4,12 +4,11 @@ import cbor2
 import threading
 
 class Aggregator:
+        # Aggregates multiple messages over a time interval and publishes them as a single MQTT message. Helps reduce bandwidth.
+
     def __init__(self, mqtt_handler, topic, flush_interval=5.0):
-        """
-        mqtt_handler: An instance of MQTTHandler to publish messages.
-        topic: The MQTT topic to publish aggregated messages to.
-        flush_interval: Time interval (in seconds) to flush the buffer.
-        """
+
+        #Initialize the aggregator.
         self.mqtt_handler = mqtt_handler
         self.topic = topic
         self.flush_interval = flush_interval
@@ -20,21 +19,19 @@ class Aggregator:
         # print("Aggregator for topic '%s' started with flush_interval=%.2fs", self.topic, self.flush_interval)
 
     def _timer_callback(self, event):
+        # Timer callback triggered by ROS every flush_interval seconds.
+        # Calls the flush method to publish buffered messages.
         # print("Aggregator timer callback triggered")
         self.flush()
 
     def add_message(self, payload):
-        """
-        Add a new message payload (assumed to be already serialized, e.g., via cbor2) to the buffer.
-        """
+        # adds a new message to the buffer 
         with self.lock:
             self.buffer.append(payload)
             # print("Aggregator added message. Buffer size is now %d", len(self.buffer))
 
     def flush(self):
-        """
-        Flush the current buffer by aggregating the messages and publishing.
-        """
+        # Publish all buffered messages as one aggregated message and clears the buffer
         with self.lock:
             if not self.buffer:
                 print("Aggregator flush called but buffer is empty.")
@@ -47,8 +44,7 @@ class Aggregator:
             self.buffer.clear()
 
     def stop(self):
-        """
-        Stop the timer when shutting down.
-        """
+        # Stop the ROS timer to cleanly shut down the aggregator.
+
         self.timer.shutdown()
         rospy.loginfo("Aggregator for topic '%s' stopped", self.topic)

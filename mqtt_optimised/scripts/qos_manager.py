@@ -75,9 +75,8 @@ class QoSManager:
 
 
     def normaliseLatency(self, latency, minLatency=0.001, maxLatency=0.1):
-        """
-        Normalize latency to a value between 0 and 1.
-        """
+
+        # Normalize latency to a value between 0 and 1.
         if latency <= minLatency:
             return 0.0
         elif latency >= maxLatency:
@@ -86,9 +85,8 @@ class QoSManager:
             return (latency - minLatency) / (maxLatency - minLatency)
 
     def normaliseBandwidth(self, bandwidth, low_bw=1000, high_bw=100000):
-        """
-        Normalize bandwidth to a value between 0 and 1.
-        """
+
+        # Normalize bandwidth to a value between 0 and 1.
         if bandwidth <= low_bw:
             return 0.0
         elif bandwidth >= high_bw:
@@ -97,9 +95,7 @@ class QoSManager:
             return (bandwidth - low_bw) / (high_bw - low_bw)
 
     def normaliseJitter(self, jitter, minJitter=0, maxJitter=0.005):
-        """
-        Normalize jitter to a value between 0 and 1.
-        """
+        # Normalize jitter to a value between 0 and 1.
         if jitter <= minJitter:
             return 0.0
         elif jitter >= maxJitter:
@@ -108,11 +104,11 @@ class QoSManager:
             return (jitter - minJitter) / (maxJitter - minJitter)
 
     def calcScore(self, battery_level, latency, bandwidth, jitter):
-        """
-        Calculate a weighted score based on the input metrics.
-        Lower score means conditions are good, higher score indicates worse conditions.
-        All metrics are normalized to the range [0, 1] before applying weights.
-        """
+
+        # Calculate a weighted score based on the input metrics.
+        # Lower score means conditions are good, higher score indicates worse conditions.
+        # All metrics are normalized to the range [0, 1] before applying weights.
+
         # Battery level is assumed to be a fraction between 0 and 1.
         norm_battery = 1.0 - battery_level  # Lower battery means worse condition
 
@@ -126,6 +122,7 @@ class QoSManager:
         w_bw      = 0.35
         w_jitter  = 0.15
 
+        # calculates composite score
         score = (w_battery * norm_battery +
                  w_latency * norm_latency +
                  w_bw      * norm_bandwidth +
@@ -133,9 +130,8 @@ class QoSManager:
         return score
 
     def log_qos_change(self, new_qos, smoothed_score, battery_level, avg_latency, bandwidth_usage, jitter, error_rate):
-        """
-        Log a QoS change event to a CSV file.
-        """
+
+        # Log a QoS change event to a CSV file.
         timestamp = rospy.get_time()
         row = [
             timestamp,
@@ -156,11 +152,11 @@ class QoSManager:
             rospy.logerr("Error logging QoS change: %s", e)
 
     def setQoS(self):
-        """
-        Calculate the score from current metrics, smooth it over a window,
-        and update the QoS level only if the smoothed score exceeds hysteresis thresholds.
-        Logs the change when it occurs.
-        """
+
+        #Calculate the score from current metrics, smooth it over a window,
+        #and update the QoS level only if the smoothed score exceeds hysteresis thresholds.
+        #Logs the change when it occurs.
+
         self.current_qos = 0
         battery_level = self.metrics.getBatteryLevel()
         avg_latency, jitter, _ = self.metrics.calc_mqtt_latency()
@@ -178,6 +174,7 @@ class QoSManager:
             self.score_history.pop(0)
         smoothed_score = sum(self.score_history) / len(self.score_history)
 
+        # we move to QoS 2 here
         if self.latest_loss_pct > self.command_loss_threshold:
             print("Command Loss threshold exceed: QoS -> Lvl 2")
             self.current_qos = 2
@@ -219,7 +216,7 @@ class QoSManager:
         return self.current_qos
     
     def increase_qos(self):
-        """Increase QoS by 1, up to a max of 2."""
+        # Increase QoS by 1, up to a max of 2.
         with self.lock:
             if self.current_qos < 2:
                 self.current_qos += 1
@@ -227,17 +224,15 @@ class QoSManager:
         return self.current_qos
 
     def getQoS(self):
-        """
-        Return the current QoS level in a thread-safe manner.
-        """
+
+        #Return the current QoS level in a thread-safe manner.
         with self.lock:
             return self.current_qos if self.current_qos is not None else 0
 
     def start(self):
-        """
-        Start the dynamic QoS updater loop.
-        This loop updates the QoS every 2 seconds.
-        """
+    
+        #Start the dynamic QoS updater loop.
+        #This loop updates the QoS every 2 seconds.
         rate = rospy.Rate(0.5)  # 0.5 Hz means every 2 seconds.
         while not rospy.is_shutdown():
             self.setQoS()

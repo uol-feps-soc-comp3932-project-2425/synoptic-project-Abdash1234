@@ -5,21 +5,33 @@ HIGH_ERROR_RATE_EVENT = "high_error_rate"
 NETWORK_CONGESTION_EVENT = "network_congestion"
 DUPLICATE_MESSAGE_EVENT = "duplicate_message"
 
-def on_low_battery(battery_level):
-    # Do something, like force an aggregator flush or adjust QoS
+# fleshed out events
+def on_low_battery(battery_level, qos_manager): #battery level dropped below a threshold
     print("Low battery event triggered! Battery level: %.2f", battery_level)
-
-def on_high_latency(topic, latency,qos_manager):
-    # print("High latency detected on %s: %.3f sec", topic, latency)
     qos_manager.increase_qos()
 
-    # if topic == "/battery":
-    #     print("flush buffer")
-    # # Possibly adjust QoS here...
+def on_high_latency(topic, latency,qos_manager): #sharp spike in latency
+    qos_manager.increase_qos()
 
-# def on_high_error_rate(topic, error_rate):
-#     print("High error rate on %s: %.2f%%", topic, error_rate)
-#     # Example: Reconnect MQTT or trigger diagnostics.
+def high_error_rate(topic,error_rate, qos_manager): #sharp spike in error rate
+    qos_manager.set_qos((2))
+
+
+"""Potential New Events - need to be fleshed out """
+# def obstacle_detected(): # obstacle has been detected by the sensors - obstacle avoidance would take place following this
+#     print("Obstacle Detected")
+
+# def lost_connection():
+#     print("broker connection lost")
+
+# def broker_connect():
+#     print("robot connected to broker")
+
+# def idle_timeout():
+#     print("stopping sensor readings due to no movement")
+
+# def movement_resumed():
+#     print("command recieved, movement resumed")
 
 # def on_network_congestion(bandwidth_usage):
 #     print("Network congestion detected! Bandwidth usage: %d bytes/s", bandwidth_usage)
